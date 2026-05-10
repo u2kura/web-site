@@ -692,7 +692,50 @@ browserWinClose.addEventListener('click', function(e) {
   e.stopPropagation();
 });
 // 仮想ファイルシステム
-let fs = { '/': {} };
+let fs = {
+  '/': {
+    bin: {},
+    boot: {},
+    dev: {},
+    etc: {
+      nginx: {},
+      ssh: {},
+      systemd: {}
+    },
+    home: {
+      uni: {
+        desktop: {},
+        documents: {},
+        downloads: {},
+        projects: {
+          web: {},
+          lab: {}
+        }
+      }
+    },
+    lib: {},
+    opt: {},
+    proc: {},
+    root: {},
+    run: {},
+    sbin: {},
+    srv: {},
+    tmp: {},
+    usr: {
+      bin: {},
+      local: {
+        bin: {},
+        share: {}
+      },
+      share: {}
+    },
+    var: {
+      log: {},
+      tmp: {},
+      www: {}
+    }
+  }
+};
 let currentPath = ['/'];
 const output = document.getElementById('terminal-output');
 const currentLine = document.getElementById('terminal-current-line');
@@ -956,6 +999,27 @@ function getDir(pathArr) {
   return dir;
 }
 
+function renderTreeLines(dir, prefix) {
+  const names = Object.keys(dir || {});
+  const lines = [];
+  names.forEach(function(name, index) {
+    const isLast = index === names.length - 1;
+    const branch = isLast ? '\\-- ' : '|-- ';
+    lines.push((prefix || '') + branch + name);
+    lines.push.apply(lines, renderTreeLines(dir[name], (prefix || '') + (isLast ? '    ' : '|   ')));
+  });
+  return lines;
+}
+
+function renderHistoryLines() {
+  if (!history.length) {
+    return 'No command history yet';
+  }
+  return history.map(function(entry, index) {
+    return String(index + 1).padStart(2, ' ') + '  ' + escapeHtml(entry);
+  }).join('<br>');
+}
+
 function handleCommand(cmd) {
   if (sshPending) {
     sshSession = {
@@ -1023,10 +1087,22 @@ function handleCommand(cmd) {
       let list = Object.keys(dir);
       printResult(list.length ? list.join('  ') : '');
     }
+  } else if (command === 'tree') {
+    let targetPath = args[0] ? resolvePath(args[0]) : currentPath;
+    let dir = getDir(targetPath);
+    if (!dir) {
+      printResult(`tree: no such directory: ${args[0]}`);
+      return;
+    }
+    const rootName = targetPath.length === 1 ? '/' : targetPath[targetPath.length - 1];
+    const lines = [escapeHtml(rootName)].concat(renderTreeLines(dir, ''));
+    printResult(lines.join('<br>'));
+  } else if (command === 'history') {
+    printResult(renderHistoryLines());
   } else if (command === 'pwd') {
     printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
   } else if (command === 'help') {
-    printResult('Available commands: cd, mkdir, ls, pwd, vim, ssh, help, clear');
+    printResult('Available commands: cd, mkdir, ls, tree, history, pwd, vim, ssh, help, clear');
   } else if (command === 'clear') {
     output.innerHTML = '';
   } else if (command === '') {
