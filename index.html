@@ -952,7 +952,9 @@ function handleCommand(cmd) {
   }
 
   const [command, ...args] = cmd.trim().split(/\s+/);
-  if (command === 'ssh') {
+  if (command === 'vim') {
+    startFakeVim(args.join(' ') || 'notes.txt');
+  } else if (command === 'ssh') {
     const target = args[0] || '';
     const sshMatch = target.match(/^([^@\s]+)@([^\s]+)$/);
     if (!sshMatch) {
@@ -998,7 +1000,7 @@ function handleCommand(cmd) {
   } else if (command === 'pwd') {
     printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
   } else if (command === 'help') {
-    printResult('Available commands: cd, mkdir, ls, pwd, ssh, help, clear');
+    printResult('Available commands: cd, mkdir, ls, pwd, vim, ssh, help, clear');
   } else if (command === 'clear') {
     output.innerHTML = '';
   } else if (command === '') {
