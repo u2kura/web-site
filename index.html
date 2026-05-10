@@ -193,15 +193,29 @@ function hideTerminalWindow() {
   win.style.display = 'none';
 }
 
+function focusTerminalInput() {
+  const inputSpan = currentLine.querySelector('.terminal-cmd');
+  if (!inputSpan) {
+    return;
+  }
+  inputSpan.focus();
+  if (vimState) {
+    return;
+  }
+  const range = document.createRange();
+  const sel = window.getSelection();
+  range.selectNodeContents(inputSpan);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
 function focusTerminalWindow() {
   showTerminalWindow();
   bringWindowToFront(win);
-  const inputSpan = currentLine.querySelector('.terminal-cmd');
   win.style.boxShadow = '0 18px 44px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(126, 207, 255, 0.28)';
   browserWin.style.boxShadow = '';
-  if (inputSpan) {
-    inputSpan.focus();
-  }
+  focusTerminalInput();
 }
 
 function showBrowserWindow(url, titleText) {
@@ -1053,15 +1067,7 @@ function renderCurrentLine() {
   inputSpan.appendChild(cursor);
   currentLine.appendChild(promptSpan);
   currentLine.appendChild(inputSpan);
-  // フォーカス
-  inputSpan.focus();
-  // キャレット位置を末尾に
-  let range = document.createRange();
-  let sel = window.getSelection();
-  range.selectNodeContents(inputSpan);
-  range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
+  focusTerminalInput();
 }
 
 function submitCommand() {
@@ -1131,8 +1137,14 @@ document.addEventListener('keydown', function(e) {
 });
 
 currentLine.addEventListener('click', function() {
-  let inputSpan = currentLine.querySelector('.terminal-cmd');
-  inputSpan.focus();
+  focusTerminalInput();
+});
+
+win.addEventListener('mousedown', function(e) {
+  if (e.target.closest('.window-header') || e.target.closest('.window-resize-handle') || e.target.closest('.window-close')) {
+    return;
+  }
+  focusTerminalWindow();
 });
 
 document.querySelectorAll('[data-focus-terminal="true"]').forEach(function(element) {
