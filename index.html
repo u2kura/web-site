@@ -237,7 +237,8 @@ function renderVisitorInfo(sections) {
     const rows = section.rows.map(function(row) {
       return '<div class="visitor-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(formatValue(row[1])) + '</strong></div>';
     }).join('');
-    return '<section class="visitor-section"><p class="visitor-section-title">' + escapeHtml(section.title) + '</p>' + rows + '</section>';
+    const title = section.title ? '<p class="visitor-section-title">' + escapeHtml(section.title) + '</p>' : '';
+    return '<section class="visitor-section">' + title + rows + '</section>';
   }).join('');
 }
 
@@ -343,38 +344,64 @@ async function loadVisitorInfo() {
   let geo = Object.assign({}, fallback);
 
   try {
-    const response = await fetch('https://ipapi.co/json/');
-    if (!response.ok) {
-      throw new Error('ip lookup failed');
+    const providers = [
+      {
+        url: 'https://ipapi.co/json/',
+        map: function(data) {
+          return {
+            ip: data.ip,
+            country: data.country_name,
+            region: data.region,
+            city: data.city,
+            postal: data.postal,
+            timezone: data.timezone,
+            asn: data.asn,
+            isp: data.org || data.org_name
+          };
+        }
+      },
+      {
+        url: 'https://ipwho.is/',
+        map: function(data) {
+          if (data.success === false) {
+            throw new Error('ipwhois lookup failed');
+          }
+          return {
+            ip: data.ip,
+            country: data.country,
+            region: data.region,
+            city: data.city,
+            postal: data.postal,
+            timezone: data.timezone && data.timezone.id,
+            asn: data.connection && data.connection.asn,
+            isp: data.connection && data.connection.isp
+          };
+        }
+      }
+    ];
+
+    for (const provider of providers) {
+      const response = await fetch(provider.url);
+      if (!response.ok) {
+        continue;
+      }
+      const data = await response.json();
+      geo = Object.assign({}, fallback, provider.map(data));
+      if (geo.ip && geo.country && geo.country !== fallback.country) {
+        break;
+      }
     }
-    const data = await response.json();
-    geo = {
-      ip: data.ip || fallback.ip,
-      country: data.country_name || fallback.country,
-      region: data.region || fallback.region,
-      city: data.city || fallback.city,
-      postal: data.postal || fallback.postal,
-      timezone: data.timezone || fallback.timezone,
-      asn: data.asn || fallback.asn,
-      isp: data.org || data.org_name || fallback.isp
-    };
   } catch (error) {
     geo = fallback;
   }
 
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   const gpu = getGpuInfo();
-  const notificationPermission = typeof Notification !== 'undefined' ? Notification.permission : 'Unsupported';
-  const geoPermission = await getPermissionState('geolocation');
-  const cameraPermission = await getPermissionState('camera');
-  const microphonePermission = await getPermissionState('microphone');
   const battery = await getBatteryInfo();
-  const mediaInfo = await getMediaInfo();
-  const geoCoords = await getGeoInfo(geoPermission);
 
   renderVisitorInfo([
     {
-      title: 'Visitor Node',
+      title: '',
       rows: [
         ['IP', geo.ip],
         ['Country', geo.country],
@@ -394,9 +421,7 @@ async function loadVisitorInfo() {
         ['Language', navigator.language || 'Unknown'],
         ['CPU', navigator.hardwareConcurrency ? navigator.hardwareConcurrency + ' cores' : 'Unavailable'],
         ['Memory', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unavailable'],
-        ['Screen', window.screen ? window.screen.width + 'x' + window.screen.height : 'Unknown'],
-        ['Theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'Dark' : 'Light'],
-        ['Touch', navigator.maxTouchPoints ? String(navigator.maxTouchPoints) : '0']
+        ['Screen', window.screen ? window.screen.width + 'x' + window.screen.height : 'Unknown']
       ]
     },
     {
@@ -406,10 +431,7 @@ async function loadVisitorInfo() {
         ['Downlink', connection && connection.downlink ? connection.downlink + ' Mb/s' : 'Unavailable'],
         ['RTT', connection && connection.rtt ? connection.rtt + ' ms' : 'Unavailable'],
         ['GPU', gpu.renderer],
-        ['Battery', battery.level],
-        ['Notify', notificationPermission],
-        ['Geo', geoPermission === 'granted' ? geoCoords : geoPermission],
-        ['Referrer', document.referrer || 'Direct']
+        ['Battery', battery.level]
       ]
     }
   ]);
