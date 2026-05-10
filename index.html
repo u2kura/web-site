@@ -104,6 +104,10 @@
     </div>
   </main>
   <footer class="site-footer">
+    <button class="start-button" id="start-button" type="button" aria-label="Open start menu" aria-expanded="false">
+      <span class="start-button-badge">U</span>
+      <span class="start-button-label">Start</span>
+    </button>
     <div class="dock" aria-label="Application dock">
       <button class="dock-item dock-item-active" type="button" data-focus-terminal="true" data-app="terminal">
         <span class="dock-glyph">&gt;_</span>
@@ -126,6 +130,63 @@
     </div>
     <span class="footer-sign">©u2kura</span>
   </footer>
+  <section class="start-menu start-menu-hidden" id="start-menu" aria-label="Start menu">
+    <div class="start-menu-top">
+      <div>
+        <p class="start-menu-kicker">u2kura OS</p>
+        <h2 class="start-menu-title">Quick Launch</h2>
+      </div>
+      <p class="start-menu-copy">apps, links, and actions</p>
+    </div>
+    <div class="start-menu-grid">
+      <button class="start-menu-item" type="button" data-focus-terminal="true">
+        <span class="start-menu-glyph">&gt;_</span>
+        <span>
+          <strong>Terminal</strong>
+          <small>virtual shell</small>
+        </span>
+      </button>
+      <button class="start-menu-item" type="button" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad">
+        <span class="start-menu-glyph">NT</span>
+        <span>
+          <strong>Notes</strong>
+          <small>local memo pad</small>
+        </span>
+      </button>
+      <button class="start-menu-item" type="button" data-open-browser="devtools://suite" data-browser-title="Dev Tools" data-browser-mode="dev-tools">
+        <span class="start-menu-glyph">DV</span>
+        <span>
+          <strong>Dev Tools</strong>
+          <small>qr, base64, json</small>
+        </span>
+      </button>
+      <button class="start-menu-item" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed">
+        <span class="start-menu-glyph">GH</span>
+        <span>
+          <strong>GitHub</strong>
+          <small>profile feed</small>
+        </span>
+      </button>
+      <button class="start-menu-item" type="button" data-open-browser="https://qiita.com/unikura" data-browser-title="Qiita / unikura" data-browser-mode="qiita-feed">
+        <span class="start-menu-glyph">QT</span>
+        <span>
+          <strong>Qiita</strong>
+          <small>article feed</small>
+        </span>
+      </button>
+      <a class="start-menu-item start-menu-link" href="https://twitter.com/u2kurage" target="_blank" rel="noreferrer">
+        <span class="start-menu-glyph">X</span>
+        <span>
+          <strong>X</strong>
+          <small>external link</small>
+        </span>
+      </a>
+    </div>
+    <div class="start-menu-footer">
+      <button class="start-menu-action" id="start-copy-url" type="button">Copy Site URL</button>
+      <button class="start-menu-action" id="start-open-devtools" type="button">Open Dev Tools</button>
+    </div>
+  </section>
   <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
 </body>
 <style>
@@ -180,6 +241,10 @@ const browserTitle = document.getElementById('browser-window-title');
 const browserOpenExternal = document.getElementById('browser-open-external');
 const browserEmbedNote = document.getElementById('browser-embed-note');
 const browserCustomContent = document.getElementById('browser-custom-content');
+const startButton = document.getElementById('start-button');
+const startMenu = document.getElementById('start-menu');
+const startCopyUrl = document.getElementById('start-copy-url');
+const startOpenDevTools = document.getElementById('start-open-devtools');
 const toastStack = document.getElementById('toast-stack');
 const clock = document.getElementById('status-clock');
 const bootScreen = document.getElementById('boot-screen');
@@ -230,6 +295,38 @@ function showToast(message, tone) {
       toast.remove();
     }, 260);
   }, 2400);
+}
+
+function isStartMenuOpen() {
+  return startMenu && !startMenu.classList.contains('start-menu-hidden');
+}
+
+function openStartMenu() {
+  if (!startMenu || !startButton) {
+    return;
+  }
+  startMenu.classList.remove('start-menu-hidden');
+  startMenu.classList.add('start-menu-visible');
+  startButton.classList.add('start-button-active');
+  startButton.setAttribute('aria-expanded', 'true');
+}
+
+function closeStartMenu() {
+  if (!startMenu || !startButton) {
+    return;
+  }
+  startMenu.classList.add('start-menu-hidden');
+  startMenu.classList.remove('start-menu-visible');
+  startButton.classList.remove('start-button-active');
+  startButton.setAttribute('aria-expanded', 'false');
+}
+
+function toggleStartMenu() {
+  if (isStartMenuOpen()) {
+    closeStartMenu();
+  } else {
+    openStartMenu();
+  }
 }
 
 function isWindowVisible(target) {
@@ -404,7 +501,6 @@ function initDesktopIconDragging() {
         if (moved) {
           saveDesktopIconLayout();
           suppressDraggedIconClick(icon);
-          showToast('Icon position saved', 'success');
         }
       }
 
@@ -2207,6 +2303,7 @@ document.querySelectorAll('[data-focus-terminal="true"]').forEach(function(eleme
       delete element.dataset.dragBlockClick;
       return;
     }
+    closeStartMenu();
     focusTerminalWindow();
     showToast('Terminal focused', 'success');
   });
@@ -2218,6 +2315,7 @@ document.querySelectorAll('[data-open-browser]').forEach(function(element) {
       delete element.dataset.dragBlockClick;
       return;
     }
+    closeStartMenu();
     openBrowserContent(
       element.getAttribute('data-open-browser'),
       element.getAttribute('data-browser-title'),
@@ -2243,6 +2341,47 @@ browserWin.addEventListener('click', function(e) {
   browserWin.style.boxShadow = '0 18px 44px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(126, 207, 255, 0.28)';
   win.style.boxShadow = '';
   setActiveApp(currentBrowserApp);
+});
+
+if (startButton) {
+  startButton.addEventListener('click', function(e) {
+    toggleStartMenu();
+    e.stopPropagation();
+  });
+}
+
+if (startCopyUrl) {
+  startCopyUrl.addEventListener('click', function() {
+    writeTextToClipboard(window.location.href).then(function() {
+      showToast('Site URL copied', 'success');
+      closeStartMenu();
+    }).catch(function() {
+      showToast('Clipboard API is unavailable', 'warning');
+    });
+  });
+}
+
+if (startOpenDevTools) {
+  startOpenDevTools.addEventListener('click', function() {
+    openBrowserContent('devtools://suite', 'Dev Tools', 'dev-tools');
+    closeStartMenu();
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (!isStartMenuOpen()) {
+    return;
+  }
+  if (e.target.closest('#start-menu') || e.target.closest('#start-button')) {
+    return;
+  }
+  closeStartMenu();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && isStartMenuOpen()) {
+    closeStartMenu();
+  }
 });
 
 window.addEventListener('DOMContentLoaded', () => {
