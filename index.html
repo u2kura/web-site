@@ -687,8 +687,12 @@ let historyIndex = 0;
 let cmdBuffer = '';
 let sshPending = null;
 let sshSession = null;
+let vimState = null;
 
 function getPrompt() {
+  if (vimState) {
+    return '';
+  }
   if (sshPending) {
     return `${sshPending.user}@${sshPending.host}'s password:`;
   }
@@ -702,9 +706,143 @@ function getRemotePromptPath() {
   return sshSession && sshSession.cwd ? sshSession.cwd : '~';
 }
 
+function escapeEditorHtml(value) {
+  return escapeHtml(value).replace(/ /g, '&nbsp;');
+}
+
+function renderVimScreen() {
+  if (!vimState || !vimState.container) {
+    return;
+  }
+
+  const rows = vimState.lines.map(function(line, index) {
+    const number = String(index + 1).padStart(2, ' ');
+    const content = line.length ? escapeEditorHtml(line) : '&nbsp;';
+    return '<div><span style="display:inline-block;width:30px;color:#6f8da3;">' + number + '</span>' + content + '</div>';
+  }).join('');
+
+  let status = '-- NORMAL --';
+  if (vimState.mode === 'insert') {
+    status = '-- INSERT --';
+  } else if (vimState.mode === 'command') {
+    status = ':' + escapeHtml(vimState.commandBuffer);
+  }
+
+  vimState.container.innerHTML = '' +
+    '<div style="border:1px solid rgba(126,207,255,0.18);border-radius:8px;padding:0.55em 0.7em;background:rgba(10,14,18,0.9);margin-top:0.2em;">' +
+      '<div style="color:#8fbad6;font-size:0.78em;margin-bottom:0.45em;">"' + escapeHtml(vimState.fileName) + '" [fake vim]</div>' +
+      '<div style="min-height:8.8em;line-height:1.5;white-space:pre-wrap;color:#e6f3ff;">' + rows + '</div>' +
+      '<div style="margin-top:0.55em;padding-top:0.35em;border-top:1px solid rgba(255,255,255,0.08);color:#9fd38f;font-size:0.8em;">' + status + '</div>' +
+    '</div>';
+}
+
+function startFakeVim(fileName) {
+  const container = document.createElement('div');
+  output.appendChild(container);
+  vimState = {
+    fileName: fileName || 'untitled.txt',
+    lines: [''],
+    mode: 'normal',
+    commandBuffer: '',
+    container: container,
+    saved: false
+  };
+  renderVimScreen();
+  output.scrollTop = output.scrollHeight;
+}
+
+function closeFakeVim(message) {
+  vimState = null;
+  renderCurrentLine();
+  if (message) {
+    printResult(message);
+  }
+}
+
+function handleVimInput(key) {
+  if (!vimState) {
+    return false;
+  }
+
+  if (vimState.mode === 'insert') {
+    if (key === 'Escape') {
+      vimState.mode = 'normal';
+    } else if (key === 'Enter') {
+      vimState.lines.push('');
+    } else if (key === 'Backspace') {
+      const current = vimState.lines.length - 1;
+      if (vimState.lines[current].length > 0) {
+        vimState.lines[current] = vimState.lines[current].slice(0, -1);
+      } else if (vimState.lines.length > 1) {
+        vimState.lines.pop();
+      }
+    } else if (key.length === 1) {
+      vimState.lines[vimState.lines.length - 1] += key;
+    }
+    renderVimScreen();
+    return true;
+  }
+
+  if (vimState.mode === 'command') {
+    if (key === 'Escape') {
+      vimState.mode = 'normal';
+      vimState.commandBuffer = '';
+    } else if (key === 'Enter') {
+      const command = vimState.commandBuffer.trim();
+      if (command === 'w') {
+        vimState.saved = true;
+        vimState.mode = 'normal';
+        vimState.commandBuffer = '';
+        renderVimScreen();
+        printResult('"' + vimState.fileName + '" written');
+        return true;
+      }
+      if (command === 'q') {
+        closeFakeVim(vimState.saved ? '' : '"' + vimState.fileName + '" closed');
+        return true;
+      }
+      if (command === 'wq' || command === 'x') {
+        closeFakeVim('"' + vimState.fileName + '" written');
+        return true;
+      }
+      vimState.mode = 'normal';
+      vimState.commandBuffer = '';
+    } else if (key === 'Backspace') {
+      vimState.commandBuffer = vimState.commandBuffer.slice(0, -1);
+    } else if (key.length === 1) {
+      vimState.commandBuffer += key;
+    }
+    renderVimScreen();
+    return true;
+  }
+
+  if (key === 'i' || key === 'a') {
+    vimState.mode = 'insert';
+    renderVimScreen();
+    return true;
+  }
+  if (key === ':') {
+    vimState.mode = 'command';
+    vimState.commandBuffer = '';
+    renderVimScreen();
+    return true;
+  }
+  if (key === 'q') {
+    closeFakeVim('Use :q to quit fake vim');
+    return true;
+  }
+  return true;
+}
+
 function handleRemoteCommand(cmd) {
   const trimmed = cmd.trim();
   if (!trimmed) {
+    return;
+  }
+
+  if (/^vim(\s+.+)?$/.test(trimmed)) {
+    const fileName = trimmed.replace(/^vim\s*/, '') || 'notes.txt';
+    startFakeVim(fileName);
     return;
   }
 
@@ -740,7 +878,7 @@ function handleRemoteCommand(cmd) {
   }
 
   if (trimmed === 'help') {
-    printResult('Remote session commands: ls, pwd, whoami, hostname, uname -a, exit');
+    printResult('Remote session commands: ls, pwd, whoami, hostname, uname -a, vim, exit');
     return;
   }
 
@@ -872,6 +1010,19 @@ function handleCommand(cmd) {
 
 function renderCurrentLine() {
   currentLine.innerHTML = '';
+  if (vimState) {
+    let inputSpan = document.createElement('span');
+    inputSpan.className = 'terminal-cmd';
+    inputSpan.contentEditable = true;
+    inputSpan.spellcheck = false;
+    inputSpan.autocapitalize = 'off';
+    inputSpan.autocomplete = 'off';
+    inputSpan.style.position = 'absolute';
+    inputSpan.style.left = '-9999px';
+    currentLine.appendChild(inputSpan);
+    inputSpan.focus();
+    return;
+  }
   let promptSpan = document.createElement('span');
   promptSpan.className = 'terminal-prompt';
   promptSpan.textContent = getPrompt();
@@ -912,6 +1063,11 @@ function submitCommand() {
 }
 
 currentLine.addEventListener('keydown', function(e) {
+  if (vimState) {
+    e.preventDefault();
+    handleVimInput(e.key);
+    return;
+  }
   let inputSpan = currentLine.querySelector('.terminal-cmd');
   if (e.key === 'Enter') {
     e.preventDefault();
