@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Engineer Terminal Web</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="background"></div>
+  <header class="site-header">
+    <div class="site-logo">uni web 海月</div>
+  </header>
+  <main>
+    <div class="terminal login-terminal window" id="terminal-window">
+      <div class="terminal-header window-header" id="window-header">
+          <div class="window-resize-handle" id="window-resize"></div>
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="title">uni@web:~$</span>
+        <div class="window-links">
+          <a class="window-link github-link" href="https://github.com/u2kura" target="_blank" rel="noreferrer" aria-label="GitHub">
+            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
+              <text x="12" y="16" text-anchor="middle">G</text>
+            </svg>
+          </a>
+          <a class="window-link qiita-link" href="https://qiita.com/unikura" target="_blank" rel="noreferrer" aria-label="Qiita">
+            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
+              <text x="12" y="16" text-anchor="middle">Q</text>
+            </svg>
+          </a>
+          <a class="window-link x-link" href="https://twitter.com/u2kurage" target="_blank" rel="noreferrer" aria-label="X">
+            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
+              <text x="12" y="16" text-anchor="middle">X</text>
+            </svg>
+          </a>
+        </div>
+      </div>
+      <div class="terminal-body">
+        <div class="login-block">
+          <span class="login-text">login as: <span class="login-user">uni</span></span><br>
+          <span class="login-text">Password: <span class="login-pass">********</span></span><br>
+          <span class="login-text">ようこそ <span class="highlight">uni web 海月</span> へ</span>
+        </div>
+        <div class="terminal-emulator">
+          <div id="terminal-output" class="terminal-output"></div>
+          <div id="terminal-current-line" class="terminal-line" tabindex="0"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <span>© 2026 Engineer Terminal Web</span>
+  </footer>
+</body>
+<style>
+.window {
+  position: absolute;
+  left: 50px;
+  top: 120px;
+  min-width: 320px;
+  min-height: 180px;
+  resize: none;
+  user-select: none;
+  transition: box-shadow 0.2s;
+  box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37), 0 0 0 2px #7ecfff33;
+}
+.window-header {
+  cursor: move;
+  user-select: none;
+}
+.window-resize-handle {
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  background: transparent;
+  cursor: se-resize;
+  z-index: 2;
+}
+.window-resize-handle:after {
+  content: '';
+  display: block;
+  width: 100%; height: 100%;
+  border-right: 2px solid #7ecfff;
+  border-bottom: 2px solid #7ecfff;
+  border-radius: 0 0 6px 0;
+  box-sizing: border-box;
+}
+</style>
+<script>
+// --- Window Drag & Resize ---
+const win = document.getElementById('terminal-window');
+const winHeader = document.getElementById('window-header');
+const winResize = document.getElementById('window-resize');
+let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
+let isResizing = false, resizeStartX = 0, resizeStartY = 0, startW = 0, startH = 0;
+
+winHeader.addEventListener('mousedown', function(e) {
+  if (e.target.closest('.window-link')) {
+    return;
+  }
+  isDragging = true;
+  dragOffsetX = e.clientX - win.offsetLeft;
+  dragOffsetY = e.clientY - win.offsetTop;
+  win.style.transition = 'none';
+});
+document.addEventListener('mousemove', function(e) {
+  if (isDragging) {
+    win.style.left = (e.clientX - dragOffsetX) + 'px';
+    win.style.top = (e.clientY - dragOffsetY) + 'px';
+  }
+  if (isResizing) {
+    let minW = 340, minH = 210;
+    let newW = Math.max(minW, startW + (e.clientX - resizeStartX));
+    let newH = Math.max(minH, startH + (e.clientY - resizeStartY));
+    win.style.width = newW + 'px';
+    win.style.height = newH + 'px';
+  }
+});
+document.addEventListener('mouseup', function() {
+  isDragging = false;
+  isResizing = false;
+  win.style.transition = '';
+});
+winResize.addEventListener('mousedown', function(e) {
+  isResizing = true;
+  resizeStartX = e.clientX;
+  resizeStartY = e.clientY;
+  startW = win.offsetWidth;
+  startH = win.offsetHeight;
+  win.style.transition = 'none';
+  e.stopPropagation();
+});
+// 仮想ファイルシステム
+let fs = { '/': {} };
+let currentPath = ['/'];
+const output = document.getElementById('terminal-output');
+const currentLine = document.getElementById('terminal-current-line');
+let history = [];
+let historyIndex = 0;
+let cmdBuffer = '';
+
+function getPrompt() {
+  return `uni@web:${currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/')}$`;
+}
+
+function printLine(promptText, cmd, resultHtml = '') {
+  let line = document.createElement('div');
+  line.className = 'terminal-line';
+  line.innerHTML = `<span class=\"terminal-prompt\">${promptText}</span><span>${cmd}</span>`;
+  output.appendChild(line);
+  if (resultHtml && resultHtml.trim() !== '') {
+    let res = document.createElement('div');
+    res.innerHTML = resultHtml;
+    output.appendChild(res);
+  }
+  output.scrollTop = output.scrollHeight;
+}
+
+function printResult(resultHtml) {
+  if (resultHtml && resultHtml.trim() !== '') {
+    let res = document.createElement('div');
+    res.innerHTML = resultHtml;
+    output.appendChild(res);
+    output.scrollTop = output.scrollHeight;
+  }
+}
+
+function resolvePath(path) {
+  if (!path || path === '.') return [...currentPath];
+  let parts = path.split('/').filter(Boolean);
+  let base = path.startsWith('/') ? ['/'] : [...currentPath];
+  for (let part of parts) {
+    if (part === '..') {
+      if (base.length > 1) base.pop();
+    } else {
+      base.push(part);
+    }
+  }
+  return base;
+}
+
+function getDir(pathArr) {
+  let dir = fs['/'];
+  for (let i = 1; i < pathArr.length; i++) {
+    if (!dir[pathArr[i]]) return null;
+    dir = dir[pathArr[i]];
+  }
+  return dir;
+}
+
+function handleCommand(cmd) {
+  const [command, ...args] = cmd.trim().split(/\s+/);
+  if (command === 'cd') {
+    let target = args[0] || '/';
+    let newPath = resolvePath(target);
+    let dir = getDir(newPath);
+    if (dir) {
+      currentPath = newPath;
+    } else {
+      printResult(`cd: no such directory: ${target}`);
+    }
+  } else if (command === 'mkdir') {
+    let name = args[0];
+    if (!name) {
+      printResult('mkdir: missing directory name');
+      return;
+    }
+    let newPath = resolvePath(name);
+    let parent = getDir(newPath.slice(0, -1));
+    if (!parent) {
+      printResult('mkdir: cannot create directory: No such parent directory');
+      return;
+    }
+    if (parent[newPath[newPath.length - 1]]) {
+      printResult('mkdir: cannot create directory: Directory exists');
+      return;
+    }
+    parent[newPath[newPath.length - 1]] = {};
+  } else if (command === 'ls') {
+    let dir = getDir(currentPath);
+    if (dir) {
+      let list = Object.keys(dir);
+      printResult(list.length ? list.join('  ') : '');
+    }
+  } else if (command === 'pwd') {
+    printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
+  } else if (command === 'help') {
+    printResult('Available commands: cd, mkdir, ls, pwd, help, clear');
+  } else if (command === 'clear') {
+    output.innerHTML = '';
+  } else if (command === '') {
+    // 何もしない
+  } else {
+    printResult(`${command}: command not found`);
+  }
+}
+
+function renderCurrentLine() {
+  currentLine.innerHTML = '';
+  let promptSpan = document.createElement('span');
+  promptSpan.className = 'terminal-prompt';
+  promptSpan.textContent = getPrompt();
+  let inputSpan = document.createElement('span');
+  inputSpan.className = 'terminal-cmd';
+  inputSpan.contentEditable = true;
+  inputSpan.spellcheck = false;
+  inputSpan.autocapitalize = 'off';
+  inputSpan.autocomplete = 'off';
+  inputSpan.innerText = cmdBuffer;
+  // カーソル
+  let cursor = document.createElement('span');
+  cursor.className = 'terminal-cursor';
+  inputSpan.appendChild(cursor);
+  currentLine.appendChild(promptSpan);
+  currentLine.appendChild(inputSpan);
+  // フォーカス
+  inputSpan.focus();
+  // キャレット位置を末尾に
+  let range = document.createRange();
+  let sel = window.getSelection();
+  range.selectNodeContents(inputSpan);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function submitCommand() {
+  let cmd = cmdBuffer;
+  printLine(getPrompt(), cmd);
+  handleCommand(cmd);
+  history.push(cmd);
+  historyIndex = history.length;
+  cmdBuffer = '';
+  renderCurrentLine();
+}
+
+currentLine.addEventListener('keydown', function(e) {
+  let inputSpan = currentLine.querySelector('.terminal-cmd');
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    cmdBuffer = inputSpan.innerText.replace(/\n/g, '');
+    submitCommand();
+  } else if (e.key === 'ArrowUp') {
+    if (historyIndex > 0) {
+      historyIndex--;
+      cmdBuffer = history[historyIndex] || '';
+      renderCurrentLine();
+    }
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      cmdBuffer = history[historyIndex] || '';
+    } else {
+      historyIndex = history.length;
+      cmdBuffer = '';
+    }
+    renderCurrentLine();
+    e.preventDefault();
+  } else {
+    setTimeout(() => {
+      cmdBuffer = inputSpan.innerText.replace(/\n/g, '');
+    }, 0);
+  }
+});
+
+currentLine.addEventListener('click', function() {
+  let inputSpan = currentLine.querySelector('.terminal-cmd');
+  inputSpan.focus();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  renderCurrentLine();
+  printLine(getPrompt(), '', "Welcome to the virtual terminal! Type 'help' for commands");
+  // 初期ウィンドウサイズ
+  win.style.width = '480px';
+  win.style.height = '320px';
+});
+</script>
+</html>
