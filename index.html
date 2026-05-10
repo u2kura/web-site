@@ -410,6 +410,29 @@ async function loadVisitorInfo() {
   const gpu = getGpuInfo();
   const battery = await getBatteryInfo();
 
+  latestVisitorInfo = {
+    ip: geo.ip,
+    country: geo.country,
+    region: geo.region,
+    city: geo.city,
+    postal: geo.postal,
+    timezone: geo.timezone,
+    isp: geo.isp,
+    asn: geo.asn,
+    browser: getBrowserName(),
+    platform: navigator.platform || 'Unknown',
+    language: navigator.language || 'Unknown',
+    cpu: navigator.hardwareConcurrency ? navigator.hardwareConcurrency + ' cores' : 'Unavailable',
+    memory: navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unavailable',
+    screen: window.screen ? window.screen.width + 'x' + window.screen.height : 'Unknown',
+    networkType: connection && connection.effectiveType ? connection.effectiveType : 'Unavailable',
+    downlink: connection && connection.downlink ? connection.downlink + ' Mb/s' : 'Unavailable',
+    rtt: connection && connection.rtt ? connection.rtt + ' ms' : 'Unavailable',
+    gpu: gpu.renderer,
+    battery: battery.level,
+    capturedAt: new Date().toISOString()
+  };
+
   renderVisitorInfo([
     {
       title: '',
@@ -757,6 +780,25 @@ let cmdBuffer = '';
 let sshPending = null;
 let sshSession = null;
 let vimState = null;
+let latestVisitorInfo = null;
+
+const quickLinks = {
+  github: {
+    url: 'https://github.com/u2kura',
+    title: 'GitHub / u2kura',
+    mode: 'github-feed'
+  },
+  qiita: {
+    url: 'https://qiita.com/unikura',
+    title: 'Qiita / unikura',
+    mode: 'qiita-feed'
+  },
+  x: {
+    url: 'https://twitter.com/u2kurage',
+    title: 'X / u2kurage',
+    mode: 'iframe'
+  }
+};
 
 function getPrompt() {
   if (vimState) {
@@ -988,6 +1030,39 @@ function printResult(resultHtml) {
   }
 }
 
+function openQuickLink(target) {
+  const entry = quickLinks[target];
+  if (!entry) {
+    return false;
+  }
+  openBrowserContent(entry.url, entry.title, entry.mode);
+  return true;
+}
+
+function copyTextToClipboard(text, successMessage) {
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    printResult('Clipboard API is unavailable in this browser');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(function() {
+    printResult(successMessage || 'Copied to clipboard');
+  }).catch(function() {
+    printResult('Failed to copy to clipboard');
+  });
+}
+
+function downloadTextFile(fileName, text) {
+  const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function resolvePath(path) {
   if (!path || path === '.') return [...currentPath];
   let parts = path.split('/').filter(Boolean);
@@ -1151,6 +1226,46 @@ function handleCommand(cmd) {
     printResult(lines.join('<br>'));
   } else if (command === 'history') {
     printResult(renderHistoryLines());
+  } else if (command === 'myip') {
+    if (!latestVisitorInfo) {
+      printResult('Visitor info is still loading');
+      return;
+    }
+    printResult([
+      'IP: ' + escapeHtml(latestVisitorInfo.ip),
+      'Country: ' + escapeHtml(latestVisitorInfo.country),
+      'Region: ' + escapeHtml([latestVisitorInfo.region, latestVisitorInfo.city].filter(Boolean).join(' / '))
+    ].join('<br>'));
+  } else if (command === 'copyip') {
+    if (!latestVisitorInfo) {
+      printResult('Visitor info is still loading');
+      return;
+    }
+    copyTextToClipboard(latestVisitorInfo.ip, 'IP copied to clipboard: ' + escapeHtml(latestVisitorInfo.ip));
+  } else if (command === 'saveinfo') {
+    if (!latestVisitorInfo) {
+      printResult('Visitor info is still loading');
+      return;
+    }
+    const fileName = args[0] || 'visitor-info.json';
+    downloadTextFile(fileName, JSON.stringify(latestVisitorInfo, null, 2));
+    printResult('Saved visitor info as ' + escapeHtml(fileName));
+  } else if (command === 'open') {
+    const target = (args[0] || '').toLowerCase();
+    if (!target) {
+      printResult('usage: open github|qiita|x|https://...');
+      return;
+    }
+    if (openQuickLink(target)) {
+      printResult('Opened ' + escapeHtml(target));
+      return;
+    }
+    if (/^https?:\/\//.test(target)) {
+      openBrowserContent(target, target, 'iframe');
+      printResult('Opened ' + escapeHtml(target));
+      return;
+    }
+    printResult('open: supported targets are github, qiita, x, or a full https URL');
   } else if (command === 'cat') {
     let target = args[0];
     if (!target) {
@@ -1170,7 +1285,7 @@ function handleCommand(cmd) {
   } else if (command === 'pwd') {
     printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
   } else if (command === 'help') {
-    printResult('Available commands: cd, mkdir, touch, ls, tree, cat, history, pwd, vim, ssh, help, clear');
+    printResult('Available commands: cd, mkdir, touch, ls, tree, cat, history, myip, copyip, saveinfo, open, pwd, vim, ssh, help, clear');
   } else if (command === 'clear') {
     output.innerHTML = '';
   } else if (command === '') {
