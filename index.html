@@ -692,24 +692,36 @@ browserWinClose.addEventListener('click', function(e) {
   e.stopPropagation();
 });
 // 仮想ファイルシステム
+function createFile(content) {
+  return {
+    __type: 'file',
+    content: content || ''
+  };
+}
+
 let fs = {
   '/': {
     bin: {},
     boot: {},
     dev: {},
     etc: {
+      'hosts': createFile('127.0.0.1 localhost\n127.0.1.1 uni-web\n'),
+      'os-release': createFile('NAME="Uni Linux"\nVERSION="24.04 LTS"\nID=uni\nPRETTY_NAME="Uni Linux 24.04 LTS"\n'),
       nginx: {},
       ssh: {},
       systemd: {}
     },
     home: {
       uni: {
+        '.bashrc': createFile('export PS1="uni@web:\\w\\$ "\nalias ll="ls"\n'),
         desktop: {},
         documents: {},
         downloads: {},
         projects: {
           web: {},
-          lab: {}
+          lab: {
+            'README.md': createFile('# lab\nThis is a fake terminal workspace.\n')
+          }
         }
       }
     },
@@ -993,10 +1005,28 @@ function resolvePath(path) {
 function getDir(pathArr) {
   let dir = fs['/'];
   for (let i = 1; i < pathArr.length; i++) {
-    if (!dir[pathArr[i]]) return null;
+    if (!dir[pathArr[i]] || dir[pathArr[i]].__type === 'file') return null;
     dir = dir[pathArr[i]];
   }
   return dir;
+}
+
+function getNode(pathArr) {
+  if (pathArr.length === 1) {
+    return fs['/'];
+  }
+  let node = fs['/'];
+  for (let i = 1; i < pathArr.length; i++) {
+    if (!node || node.__type === 'file' || !node[pathArr[i]]) {
+      return null;
+    }
+    node = node[pathArr[i]];
+  }
+  return node;
+}
+
+function isFileNode(node) {
+  return Boolean(node && node.__type === 'file');
 }
 
 function renderTreeLines(dir, prefix) {
@@ -1006,7 +1036,9 @@ function renderTreeLines(dir, prefix) {
     const isLast = index === names.length - 1;
     const branch = isLast ? '\\-- ' : '|-- ';
     lines.push((prefix || '') + branch + name);
-    lines.push.apply(lines, renderTreeLines(dir[name], (prefix || '') + (isLast ? '    ' : '|   ')));
+    if (!isFileNode(dir[name])) {
+      lines.push.apply(lines, renderTreeLines(dir[name], (prefix || '') + (isLast ? '    ' : '|   ')));
+    }
   });
   return lines;
 }
@@ -1081,6 +1113,26 @@ function handleCommand(cmd) {
       return;
     }
     parent[newPath[newPath.length - 1]] = {};
+  } else if (command === 'touch') {
+    let name = args[0];
+    if (!name) {
+      printResult('touch: missing file operand');
+      return;
+    }
+    let newPath = resolvePath(name);
+    let parent = getDir(newPath.slice(0, -1));
+    if (!parent) {
+      printResult('touch: cannot touch: No such parent directory');
+      return;
+    }
+    const fileName = newPath[newPath.length - 1];
+    if (parent[fileName] && !isFileNode(parent[fileName])) {
+      printResult('touch: cannot touch: Is a directory');
+      return;
+    }
+    if (!parent[fileName]) {
+      parent[fileName] = createFile('');
+    }
   } else if (command === 'ls') {
     let dir = getDir(currentPath);
     if (dir) {
@@ -1099,10 +1151,26 @@ function handleCommand(cmd) {
     printResult(lines.join('<br>'));
   } else if (command === 'history') {
     printResult(renderHistoryLines());
+  } else if (command === 'cat') {
+    let target = args[0];
+    if (!target) {
+      printResult('cat: missing file operand');
+      return;
+    }
+    let node = getNode(resolvePath(target));
+    if (!node) {
+      printResult(`cat: ${target}: No such file or directory`);
+      return;
+    }
+    if (!isFileNode(node)) {
+      printResult(`cat: ${target}: Is a directory`);
+      return;
+    }
+    printResult(escapeHtml(node.content).replace(/\n/g, '<br>') || '&nbsp;');
   } else if (command === 'pwd') {
     printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
   } else if (command === 'help') {
-    printResult('Available commands: cd, mkdir, ls, tree, history, pwd, vim, ssh, help, clear');
+    printResult('Available commands: cd, mkdir, touch, ls, tree, cat, history, pwd, vim, ssh, help, clear');
   } else if (command === 'clear') {
     output.innerHTML = '';
   } else if (command === '') {
