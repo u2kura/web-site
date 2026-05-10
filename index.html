@@ -1140,7 +1140,7 @@ currentLine.addEventListener('click', function() {
   focusTerminalInput();
 });
 
-win.addEventListener('mousedown', function(e) {
+win.addEventListener('click', function(e) {
   if (e.target.closest('.window-header') || e.target.closest('.window-resize-handle') || e.target.closest('.window-close')) {
     return;
   }
