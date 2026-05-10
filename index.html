@@ -759,6 +759,28 @@ function closeFakeVim(message) {
   }
 }
 
+function executeVimCommand(rawCommand) {
+  const command = rawCommand.replace(/^:/, '').trim();
+  if (command === 'w') {
+    vimState.saved = true;
+    vimState.mode = 'normal';
+    vimState.commandBuffer = '';
+    renderVimScreen();
+    printResult('"' + vimState.fileName + '" written');
+    return true;
+  }
+  if (command === 'q') {
+    closeFakeVim(vimState.saved ? '' : '"' + vimState.fileName + '" closed');
+    return true;
+  }
+  if (command === 'wq' || command === 'x') {
+    vimState.saved = true;
+    closeFakeVim('"' + vimState.fileName + '" written');
+    return true;
+  }
+  return false;
+}
+
 function handleVimInput(key) {
   if (!vimState) {
     return false;
@@ -768,6 +790,10 @@ function handleVimInput(key) {
     if (key === 'Escape') {
       vimState.mode = 'normal';
     } else if (key === 'Enter') {
+      const currentLine = vimState.lines[vimState.lines.length - 1].trim();
+      if (executeVimCommand(currentLine)) {
+        return true;
+      }
       vimState.lines.push('');
     } else if (key === 'Backspace') {
       const current = vimState.lines.length - 1;
@@ -788,21 +814,7 @@ function handleVimInput(key) {
       vimState.mode = 'normal';
       vimState.commandBuffer = '';
     } else if (key === 'Enter') {
-      const command = vimState.commandBuffer.trim();
-      if (command === 'w') {
-        vimState.saved = true;
-        vimState.mode = 'normal';
-        vimState.commandBuffer = '';
-        renderVimScreen();
-        printResult('"' + vimState.fileName + '" written');
-        return true;
-      }
-      if (command === 'q') {
-        closeFakeVim(vimState.saved ? '' : '"' + vimState.fileName + '" closed');
-        return true;
-      }
-      if (command === 'wq' || command === 'x') {
-        closeFakeVim('"' + vimState.fileName + '" written');
+      if (executeVimCommand(vimState.commandBuffer)) {
         return true;
       }
       vimState.mode = 'normal';
