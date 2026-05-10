@@ -70,6 +70,9 @@ body::after {
   overflow: hidden;
   backdrop-filter: blur(14px);
 }
+.window-hidden {
+  display: none;
+}
 .window-header {
   cursor: move;
   user-select: none;
@@ -160,51 +163,34 @@ body::after {
   font-size: 1em;
   letter-spacing: 0.04em;
 }
-.window-links {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
+.window-close {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
   margin-left: 1em;
-  padding-right: 1.4em;
-}
-.window-link {
+  margin-right: 1.4em;
+  border: 1px solid rgba(255, 95, 86, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 95, 86, 0.14);
+  color: #ffb2ad;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  color: #d7ecff;
-  text-decoration: none;
-  border-radius: 8px;
-  background: rgba(126, 207, 255, 0.08);
-  border: 1px solid rgba(126, 207, 255, 0.22);
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.window-link:hover {
-  transform: translateY(-1px);
-  background: rgba(126, 207, 255, 0.18);
-  border-color: rgba(126, 207, 255, 0.45);
-  box-shadow: 0 0 10px rgba(126, 207, 255, 0.22);
+.window-close:hover {
+  background: rgba(255, 95, 86, 0.24);
+  transform: scale(1.04);
+  box-shadow: 0 0 10px rgba(255, 95, 86, 0.18);
 }
-.window-link-icon {
-  width: 16px;
-  height: 16px;
-}
-.window-link-icon rect {
-  fill: currentColor;
-  opacity: 0.95;
-}
-.window-link-icon text {
-  fill: #11161b;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
-}
-.qiita-link {
-  color: #8bf38f;
-}
-.x-link {
-  color: #d4d9e1;
+.window-close:focus-visible {
+  outline: 2px solid rgba(255, 95, 86, 0.35);
+  outline-offset: 2px;
 }
 .terminal-body {
   padding: 1.2em 1.2em 1em 1.2em;

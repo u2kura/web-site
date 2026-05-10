@@ -42,26 +42,7 @@
         <span class="dot yellow"></span>
         <span class="dot green"></span>
         <span class="title">uni@web:~$</span>
-        <div class="window-links">
-          <a class="window-link github-link" href="https://github.com/u2kura" target="_blank" rel="noreferrer" aria-label="GitHub">
-            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
-              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
-              <text x="12" y="16" text-anchor="middle">G</text>
-            </svg>
-          </a>
-          <a class="window-link qiita-link" href="https://qiita.com/unikura" target="_blank" rel="noreferrer" aria-label="Qiita">
-            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
-              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
-              <text x="12" y="16" text-anchor="middle">Q</text>
-            </svg>
-          </a>
-          <a class="window-link x-link" href="https://twitter.com/u2kurage" target="_blank" rel="noreferrer" aria-label="X">
-            <svg viewBox="0 0 24 24" class="window-link-icon" aria-hidden="true">
-              <rect x="2" y="2" width="20" height="20" rx="6"></rect>
-              <text x="12" y="16" text-anchor="middle">X</text>
-            </svg>
-          </a>
-        </div>
+        <button class="window-close" id="window-close" type="button" aria-label="Close terminal">×</button>
       </div>
       <div class="terminal-body">
         <div class="login-block">
@@ -133,11 +114,23 @@
 const win = document.getElementById('terminal-window');
 const winHeader = document.getElementById('window-header');
 const winResize = document.getElementById('window-resize');
+const winClose = document.getElementById('window-close');
 const clock = document.getElementById('status-clock');
 let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
 let isResizing = false, resizeStartX = 0, resizeStartY = 0, startW = 0, startH = 0;
 
+function showTerminalWindow() {
+  win.classList.remove('window-hidden');
+  win.style.display = 'flex';
+}
+
+function hideTerminalWindow() {
+  win.classList.add('window-hidden');
+  win.style.display = 'none';
+}
+
 function focusTerminalWindow() {
+  showTerminalWindow();
   const inputSpan = currentLine.querySelector('.terminal-cmd');
   win.style.boxShadow = '0 18px 44px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(126, 207, 255, 0.28)';
   if (inputSpan) {
@@ -157,7 +150,7 @@ function updateClock() {
 }
 
 winHeader.addEventListener('mousedown', function(e) {
-  if (e.target.closest('.window-link')) {
+  if (e.target.closest('.window-close')) {
     return;
   }
   isDragging = true;
@@ -190,6 +183,13 @@ winResize.addEventListener('mousedown', function(e) {
   startW = win.offsetWidth;
   startH = win.offsetHeight;
   win.style.transition = 'none';
+  e.stopPropagation();
+});
+winClose.addEventListener('mousedown', function(e) {
+  e.stopPropagation();
+});
+winClose.addEventListener('click', function(e) {
+  hideTerminalWindow();
   e.stopPropagation();
 });
 // 仮想ファイルシステム
