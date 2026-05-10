@@ -34,23 +34,23 @@
     </div>
   </header>
   <aside class="desktop-shortcuts" aria-label="Desktop shortcuts">
-    <button class="desktop-icon" type="button" data-focus-terminal="true">
+    <button class="desktop-icon" type="button" data-desktop-id="terminal" data-focus-terminal="true">
       <span class="desktop-icon-glyph">&gt;_</span>
       <span class="desktop-icon-label">Terminal</span>
     </button>
-    <button class="desktop-icon" type="button" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad">
+    <button class="desktop-icon" type="button" data-desktop-id="notes" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad">
       <span class="desktop-icon-glyph">NT</span>
       <span class="desktop-icon-label">Notes</span>
     </button>
-    <button class="desktop-icon" type="button" data-open-browser="devtools://suite" data-browser-title="Dev Tools" data-browser-mode="dev-tools">
+    <button class="desktop-icon" type="button" data-desktop-id="devtools" data-open-browser="devtools://suite" data-browser-title="Dev Tools" data-browser-mode="dev-tools">
       <span class="desktop-icon-glyph">DV</span>
       <span class="desktop-icon-label">DevTools</span>
     </button>
-    <button class="desktop-icon" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed">
+    <button class="desktop-icon" type="button" data-desktop-id="github" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed">
       <span class="desktop-icon-glyph">GH</span>
       <span class="desktop-icon-label">GitHub</span>
     </button>
-    <button class="desktop-icon" type="button" data-open-browser="https://qiita.com/unikura" data-browser-title="Qiita / unikura" data-browser-mode="qiita-feed">
+    <button class="desktop-icon" type="button" data-desktop-id="qiita" data-open-browser="https://qiita.com/unikura" data-browser-title="Qiita / unikura" data-browser-mode="qiita-feed">
       <span class="desktop-icon-glyph">QT</span>
       <span class="desktop-icon-label">Qiita</span>
     </button>
@@ -187,10 +187,14 @@ const bootLog = document.getElementById('boot-log');
 const visitorGrid = document.getElementById('visitor-grid');
 const dock = document.querySelector('.dock');
 const dockItems = Array.from(document.querySelectorAll('.dock-item[data-app]'));
+const desktopShortcuts = document.querySelector('.desktop-shortcuts');
+const desktopIcons = Array.from(document.querySelectorAll('.desktop-icon[data-desktop-id]'));
 let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
 let isResizing = false, resizeStartX = 0, resizeStartY = 0, startW = 0, startH = 0;
 let activeWindow = null;
 let currentBrowserApp = null;
+
+const desktopIconStorageKey = 'u2kura-desktop-icon-layout';
 
 const bootMessages = [
   '[ ok ] mounting workspace overlay',
@@ -287,6 +291,132 @@ function updateDockMagnification(pointerX) {
 function resetDockMagnification() {
   dockItems.forEach(function(item) {
     item.style.transform = '';
+  });
+}
+
+function getDefaultDesktopIconLayout() {
+  return {
+    terminal: { x: 18, y: 0 },
+    notes: { x: 18, y: 98 },
+    devtools: { x: 18, y: 196 },
+    github: { x: 18, y: 294 },
+    qiita: { x: 18, y: 392 }
+  };
+}
+
+function loadDesktopIconLayout() {
+  const defaults = getDefaultDesktopIconLayout();
+  try {
+    const raw = localStorage.getItem(desktopIconStorageKey);
+    if (!raw) {
+      return defaults;
+    }
+    const parsed = JSON.parse(raw);
+    return Object.assign({}, defaults, parsed || {});
+  } catch (error) {
+    return defaults;
+  }
+}
+
+function saveDesktopIconLayout() {
+  const positions = {};
+  desktopIcons.forEach(function(icon) {
+    positions[icon.getAttribute('data-desktop-id')] = {
+      x: parseFloat(icon.style.left) || 0,
+      y: parseFloat(icon.style.top) || 0
+    };
+  });
+  try {
+    localStorage.setItem(desktopIconStorageKey, JSON.stringify(positions));
+  } catch (error) {
+    return;
+  }
+}
+
+function clampDesktopIconPosition(icon, x, y) {
+  if (!desktopShortcuts) {
+    return { x: x, y: y };
+  }
+  const bounds = desktopShortcuts.getBoundingClientRect();
+  const maxX = Math.max(0, bounds.width - icon.offsetWidth - 12);
+  const maxY = Math.max(0, bounds.height - icon.offsetHeight - 12);
+  return {
+    x: Math.min(Math.max(0, x), maxX),
+    y: Math.min(Math.max(0, y), maxY)
+  };
+}
+
+function applyDesktopIconLayout() {
+  const positions = loadDesktopIconLayout();
+  desktopIcons.forEach(function(icon) {
+    const id = icon.getAttribute('data-desktop-id');
+    const next = clampDesktopIconPosition(icon, positions[id].x, positions[id].y);
+    icon.style.left = next.x + 'px';
+    icon.style.top = next.y + 'px';
+  });
+}
+
+function suppressDraggedIconClick(icon) {
+  icon.dataset.dragBlockClick = 'true';
+  window.setTimeout(function() {
+    delete icon.dataset.dragBlockClick;
+  }, 0);
+}
+
+function initDesktopIconDragging() {
+  applyDesktopIconLayout();
+  desktopIcons.forEach(function(icon) {
+    icon.addEventListener('pointerdown', function(e) {
+      if (e.button !== 0) {
+        return;
+      }
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const initialLeft = parseFloat(icon.style.left) || 0;
+      const initialTop = parseFloat(icon.style.top) || 0;
+      let moved = false;
+
+      icon.classList.add('desktop-icon-grabbed');
+      icon.setPointerCapture(e.pointerId);
+
+      function onPointerMove(moveEvent) {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+        if (!moved && Math.hypot(deltaX, deltaY) > 6) {
+          moved = true;
+          icon.classList.add('desktop-icon-dragging');
+        }
+        if (!moved) {
+          return;
+        }
+        const next = clampDesktopIconPosition(icon, initialLeft + deltaX, initialTop + deltaY);
+        icon.style.left = next.x + 'px';
+        icon.style.top = next.y + 'px';
+      }
+
+      function onPointerUp() {
+        icon.classList.remove('desktop-icon-grabbed');
+        icon.classList.remove('desktop-icon-dragging');
+        icon.releasePointerCapture(e.pointerId);
+        icon.removeEventListener('pointermove', onPointerMove);
+        icon.removeEventListener('pointerup', onPointerUp);
+        icon.removeEventListener('pointercancel', onPointerUp);
+        if (moved) {
+          saveDesktopIconLayout();
+          suppressDraggedIconClick(icon);
+          showToast('Icon position saved', 'success');
+        }
+      }
+
+      icon.addEventListener('pointermove', onPointerMove);
+      icon.addEventListener('pointerup', onPointerUp);
+      icon.addEventListener('pointercancel', onPointerUp);
+    });
+  });
+
+  window.addEventListener('resize', function() {
+    applyDesktopIconLayout();
+    saveDesktopIconLayout();
   });
 }
 
@@ -2073,6 +2203,10 @@ win.addEventListener('click', function(e) {
 
 document.querySelectorAll('[data-focus-terminal="true"]').forEach(function(element) {
   element.addEventListener('click', function() {
+    if (element.dataset.dragBlockClick === 'true') {
+      delete element.dataset.dragBlockClick;
+      return;
+    }
     focusTerminalWindow();
     showToast('Terminal focused', 'success');
   });
@@ -2080,6 +2214,10 @@ document.querySelectorAll('[data-focus-terminal="true"]').forEach(function(eleme
 
 document.querySelectorAll('[data-open-browser]').forEach(function(element) {
   element.addEventListener('click', function() {
+    if (element.dataset.dragBlockClick === 'true') {
+      delete element.dataset.dragBlockClick;
+      return;
+    }
     openBrowserContent(
       element.getAttribute('data-open-browser'),
       element.getAttribute('data-browser-title'),
@@ -2111,6 +2249,7 @@ window.addEventListener('DOMContentLoaded', () => {
   startBootSequence();
   loadVisitorInfo();
   loadSavedNoteState();
+  initDesktopIconDragging();
   renderCurrentLine();
   printLine(getPrompt(), '', "Welcome to the virtual terminal! Type 'help' for commands");
   // 初期ウィンドウサイズ
