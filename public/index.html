@@ -8,6 +8,20 @@
 </head>
 <body>
   <div class="background"></div>
+  <div class="boot-screen" id="boot-screen" aria-hidden="true">
+    <div class="boot-screen-inner">
+      <p class="boot-kicker">u2kura boot sequence</p>
+      <div class="boot-log" id="boot-log"></div>
+    </div>
+  </div>
+  <aside class="visitor-hud" aria-label="Visitor system info">
+    <p class="visitor-hud-kicker">VISITOR NODE</p>
+    <div class="visitor-grid" id="visitor-grid">
+      <div class="visitor-section">
+        <p class="visitor-section-title">Loading telemetry...</p>
+      </div>
+    </div>
+  </aside>
   <header class="site-header">
     <div class="topbar-left">
       <span class="topbar-brand">u2kura OS</span>
@@ -148,9 +162,20 @@ const browserOpenExternal = document.getElementById('browser-open-external');
 const browserEmbedNote = document.getElementById('browser-embed-note');
 const browserCustomContent = document.getElementById('browser-custom-content');
 const clock = document.getElementById('status-clock');
+const bootScreen = document.getElementById('boot-screen');
+const bootLog = document.getElementById('boot-log');
+const visitorGrid = document.getElementById('visitor-grid');
 let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
 let isResizing = false, resizeStartX = 0, resizeStartY = 0, startW = 0, startH = 0;
 let activeWindow = null;
+
+const bootMessages = [
+  '[ ok ] mounting workspace overlay',
+  '[ ok ] starting virtual terminal',
+  '[ ok ] loading github and qiita adapters',
+  '[ ok ] resolving visitor telemetry',
+  '[ ok ] desktop ready'
+];
 
 function bringWindowToFront(target) {
   win.style.zIndex = target === win ? '13' : '12';
@@ -198,6 +223,212 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatValue(value, fallback) {
+  if (value === null || value === undefined || value === '') {
+    return fallback || 'Unavailable';
+  }
+  return String(value);
+}
+
+function renderVisitorInfo(sections) {
+  visitorGrid.innerHTML = sections.map(function(section) {
+    const rows = section.rows.map(function(row) {
+      return '<div class="visitor-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(formatValue(row[1])) + '</strong></div>';
+    }).join('');
+    return '<section class="visitor-section"><p class="visitor-section-title">' + escapeHtml(section.title) + '</p>' + rows + '</section>';
+  }).join('');
+}
+
+function getBrowserName() {
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return 'Edge';
+  if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) return 'Chrome';
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return 'Safari';
+  return 'Unknown';
+}
+
+function getGpuInfo() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) {
+      return { vendor: 'Unavailable', renderer: 'Unavailable' };
+    }
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!debugInfo) {
+      return { vendor: 'Restricted', renderer: 'Restricted' };
+    }
+    return {
+      vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+      renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+    };
+  } catch (error) {
+    return { vendor: 'Unavailable', renderer: 'Unavailable' };
+  }
+}
+
+async function getPermissionState(name) {
+  if (!navigator.permissions || !navigator.permissions.query) {
+    return 'Unsupported';
+  }
+  try {
+    const result = await navigator.permissions.query({ name: name });
+    return result.state;
+  } catch (error) {
+    return 'Unsupported';
+  }
+}
+
+async function getBatteryInfo() {
+  if (!navigator.getBattery) {
+    return { level: 'Unsupported', charging: 'Unsupported' };
+  }
+  try {
+    const battery = await navigator.getBattery();
+    return {
+      level: Math.round(battery.level * 100) + '%',
+      charging: battery.charging ? 'Charging' : 'Battery'
+    };
+  } catch (error) {
+    return { level: 'Unavailable', charging: 'Unavailable' };
+  }
+}
+
+async function getMediaInfo() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    return { cameras: 'Unsupported', mics: 'Unsupported' };
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return {
+      cameras: String(devices.filter(function(device) { return device.kind === 'videoinput'; }).length),
+      mics: String(devices.filter(function(device) { return device.kind === 'audioinput'; }).length)
+    };
+  } catch (error) {
+    return { cameras: 'Unavailable', mics: 'Unavailable' };
+  }
+}
+
+async function getGeoInfo(permissionState) {
+  if (!('geolocation' in navigator)) {
+    return 'Unsupported';
+  }
+  if (permissionState !== 'granted') {
+    return permissionState === 'prompt' ? 'Prompt required' : 'Not granted';
+  }
+  return new Promise(function(resolve) {
+    navigator.geolocation.getCurrentPosition(function(position) {
+      resolve(position.coords.latitude.toFixed(3) + ', ' + position.coords.longitude.toFixed(3));
+    }, function() {
+      resolve('Unavailable');
+    }, { maximumAge: 60000, timeout: 3000, enableHighAccuracy: false });
+  });
+}
+
+async function loadVisitorInfo() {
+  const fallback = {
+    ip: '127.0.0.1',
+    country: 'Unavailable',
+    region: 'Unavailable',
+    city: 'Unavailable',
+    postal: 'Unavailable',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    asn: 'Unavailable',
+    isp: 'Unavailable'
+  };
+
+  let geo = Object.assign({}, fallback);
+
+  try {
+    const response = await fetch('https://ipapi.co/json/');
+    if (!response.ok) {
+      throw new Error('ip lookup failed');
+    }
+    const data = await response.json();
+    geo = {
+      ip: data.ip || fallback.ip,
+      country: data.country_name || fallback.country,
+      region: data.region || fallback.region,
+      city: data.city || fallback.city,
+      postal: data.postal || fallback.postal,
+      timezone: data.timezone || fallback.timezone,
+      asn: data.asn || fallback.asn,
+      isp: data.org || data.org_name || fallback.isp
+    };
+  } catch (error) {
+    geo = fallback;
+  }
+
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const gpu = getGpuInfo();
+  const notificationPermission = typeof Notification !== 'undefined' ? Notification.permission : 'Unsupported';
+  const geoPermission = await getPermissionState('geolocation');
+  const cameraPermission = await getPermissionState('camera');
+  const microphonePermission = await getPermissionState('microphone');
+  const battery = await getBatteryInfo();
+  const mediaInfo = await getMediaInfo();
+  const geoCoords = await getGeoInfo(geoPermission);
+
+  renderVisitorInfo([
+    {
+      title: 'Visitor Node',
+      rows: [
+        ['IP', geo.ip],
+        ['Country', geo.country],
+        ['Region', [geo.region, geo.city].filter(Boolean).join(' / ')],
+        ['Timezone', geo.timezone],
+        ['ISP', geo.isp],
+        ['ASN', geo.asn]
+      ]
+    },
+    {
+      title: 'Client Env',
+      rows: [
+        ['Browser', getBrowserName()],
+        ['Platform', navigator.platform || 'Unknown'],
+        ['Language', navigator.language || 'Unknown'],
+        ['CPU', navigator.hardwareConcurrency ? navigator.hardwareConcurrency + ' cores' : 'Unavailable'],
+        ['Memory', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unavailable'],
+        ['Screen', window.screen ? window.screen.width + 'x' + window.screen.height : 'Unknown'],
+        ['Theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'Dark' : 'Light'],
+        ['Touch', navigator.maxTouchPoints ? String(navigator.maxTouchPoints) : '0']
+      ]
+    },
+    {
+      title: 'Network',
+      rows: [
+        ['Type', connection && connection.effectiveType ? connection.effectiveType : 'Unavailable'],
+        ['Downlink', connection && connection.downlink ? connection.downlink + ' Mb/s' : 'Unavailable'],
+        ['RTT', connection && connection.rtt ? connection.rtt + ' ms' : 'Unavailable'],
+        ['GPU', gpu.renderer],
+        ['Battery', battery.level],
+        ['Notify', notificationPermission],
+        ['Geo', geoPermission === 'granted' ? geoCoords : geoPermission],
+        ['Referrer', document.referrer || 'Direct']
+      ]
+    }
+  ]);
+}
+
+function startBootSequence() {
+  let index = 0;
+  bootLog.innerHTML = '';
+  const timer = window.setInterval(function() {
+    const line = document.createElement('div');
+    line.className = 'boot-line';
+    line.textContent = bootMessages[index];
+    bootLog.appendChild(line);
+    index += 1;
+    if (index >= bootMessages.length) {
+      window.clearInterval(timer);
+      window.setTimeout(function() {
+        bootScreen.classList.add('boot-screen-hidden');
+      }, 700);
+    }
+  }, 180);
 }
 
 function setBrowserIframeMode() {
@@ -621,6 +852,8 @@ document.querySelectorAll('[data-open-browser]').forEach(function(element) {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  startBootSequence();
+  loadVisitorInfo();
   renderCurrentLine();
   printLine(getPrompt(), '', "Welcome to the virtual terminal! Type 'help' for commands");
   // 初期ウィンドウサイズ
