@@ -345,35 +345,32 @@ async function loadVisitorInfo() {
 
   const providers = [
     {
-      url: 'https://ipwho.is/',
+      url: 'https://ipinfo.io/json',
       map: function(data) {
-        if (data.success === false) {
-          throw new Error('ipwhois lookup failed');
-        }
         return {
           ip: data.ip,
           country: data.country,
           region: data.region,
           city: data.city,
           postal: data.postal,
-          timezone: data.timezone && data.timezone.id,
-          asn: data.connection && data.connection.asn,
-          isp: data.connection && data.connection.isp
+          timezone: data.timezone,
+          asn: data.org ? data.org.split(' ')[0] : undefined,
+          isp: data.org
         };
       }
     },
     {
-      url: 'https://ipapi.co/json/',
+      url: 'https://geolocation-db.com/json/',
       map: function(data) {
         return {
-          ip: data.ip,
-          country: data.country_name,
-          region: data.region,
+          ip: data.IPv4 || data.ip,
+          country: data.country_name || data.country_code,
+          region: data.state,
           city: data.city,
           postal: data.postal,
-          timezone: data.timezone,
-          asn: data.asn,
-          isp: data.org || data.org_name
+          timezone: undefined,
+          asn: undefined,
+          isp: undefined
         };
       }
     }
