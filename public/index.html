@@ -9,8 +9,31 @@
 <body>
   <div class="background"></div>
   <header class="site-header">
+    <div class="topbar-left">
+      <span class="topbar-brand">u2kura OS</span>
+      <span class="topbar-chip">workspace</span>
+    </div>
     <div class="site-logo">uni web 海月</div>
+    <div class="topbar-right">
+      <span class="status-pill">NET</span>
+      <span class="status-pill">DEV</span>
+      <span class="status-clock" id="status-clock">00:00</span>
+    </div>
   </header>
+  <aside class="desktop-shortcuts" aria-label="Desktop shortcuts">
+    <button class="desktop-icon" type="button" data-focus-terminal="true">
+      <span class="desktop-icon-glyph">&gt;_</span>
+      <span class="desktop-icon-label">Terminal</span>
+    </button>
+    <a class="desktop-icon" href="https://github.com/u2kura" target="_blank" rel="noreferrer">
+      <span class="desktop-icon-glyph">GH</span>
+      <span class="desktop-icon-label">GitHub</span>
+    </a>
+    <a class="desktop-icon" href="https://qiita.com/unikura" target="_blank" rel="noreferrer">
+      <span class="desktop-icon-glyph">QT</span>
+      <span class="desktop-icon-label">Qiita</span>
+    </a>
+  </aside>
   <main>
     <div class="terminal login-terminal window" id="terminal-window">
       <div class="terminal-header window-header" id="window-header">
@@ -54,7 +77,21 @@
     </div>
   </main>
   <footer class="site-footer">
-    <span>© 2026 Engineer Terminal Web</span>
+    <div class="dock" aria-label="Application dock">
+      <button class="dock-item dock-item-active" type="button" data-focus-terminal="true">
+        <span class="dock-glyph">&gt;_</span>
+      </button>
+      <a class="dock-item" href="https://github.com/u2kura" target="_blank" rel="noreferrer" aria-label="GitHub">
+        <span class="dock-glyph">GH</span>
+      </a>
+      <a class="dock-item" href="https://qiita.com/unikura" target="_blank" rel="noreferrer" aria-label="Qiita">
+        <span class="dock-glyph">QT</span>
+      </a>
+      <a class="dock-item" href="https://twitter.com/u2kurage" target="_blank" rel="noreferrer" aria-label="X">
+        <span class="dock-glyph">X</span>
+      </a>
+    </div>
+    <span class="footer-sign">©u2kura</span>
   </footer>
 </body>
 <style>
@@ -96,8 +133,28 @@
 const win = document.getElementById('terminal-window');
 const winHeader = document.getElementById('window-header');
 const winResize = document.getElementById('window-resize');
+const clock = document.getElementById('status-clock');
 let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
 let isResizing = false, resizeStartX = 0, resizeStartY = 0, startW = 0, startH = 0;
+
+function focusTerminalWindow() {
+  const inputSpan = currentLine.querySelector('.terminal-cmd');
+  win.style.boxShadow = '0 18px 44px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(126, 207, 255, 0.28)';
+  if (inputSpan) {
+    inputSpan.focus();
+  }
+}
+
+function updateClock() {
+  if (!clock) {
+    return;
+  }
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
 
 winHeader.addEventListener('mousedown', function(e) {
   if (e.target.closest('.window-link')) {
@@ -314,12 +371,20 @@ currentLine.addEventListener('click', function() {
   inputSpan.focus();
 });
 
+document.querySelectorAll('[data-focus-terminal="true"]').forEach(function(element) {
+  element.addEventListener('click', function() {
+    focusTerminalWindow();
+  });
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   renderCurrentLine();
   printLine(getPrompt(), '', "Welcome to the virtual terminal! Type 'help' for commands");
   // 初期ウィンドウサイズ
   win.style.width = '480px';
   win.style.height = '320px';
+  updateClock();
+  setInterval(updateClock, 1000);
 });
 </script>
 </html>
