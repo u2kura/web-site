@@ -206,6 +206,14 @@ body::after {
   backdrop-filter: blur(14px);
   z-index: 12;
 }
+.window-enter {
+  animation: windowEnter 0.28s ease;
+}
+.window-minimizing {
+  pointer-events: none;
+  animation: windowMinimize 0.22s ease forwards;
+  transform-origin: center bottom;
+}
 .browser-window {
   min-width: 420px;
   min-height: 280px;
@@ -938,6 +946,38 @@ body::after {
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
   transition: transform 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, filter 0.15s ease;
 }
+.window-minimize {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-left: 1em;
+  margin-right: 0.35em;
+  border: 1px solid rgba(171, 124, 24, 0.9);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd66f, #ffbd2e);
+  color: rgba(61, 40, 4, 0);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, filter 0.15s ease;
+}
+.window-minimize:hover {
+  color: rgba(61, 40, 4, 0.82);
+  transform: scale(1.06);
+  filter: brightness(1.04);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22), 0 0 8px rgba(255, 189, 46, 0.22);
+}
+.window-minimize:focus-visible {
+  outline: 2px solid rgba(255, 189, 46, 0.35);
+  outline-offset: 2px;
+}
 .window-close:hover {
   color: rgba(50, 12, 10, 0.78);
   transform: scale(1.06);
@@ -1173,18 +1213,98 @@ main {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.16s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  position: relative;
 }
 .dock-item:hover {
-  transform: translateY(-2px) scale(1.03);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.22);
 }
 .dock-item-active {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(126, 207, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(126, 207, 255, 0.22), 0 12px 26px rgba(126, 207, 255, 0.18);
+  border-color: rgba(126, 207, 255, 0.34);
+  background: linear-gradient(180deg, rgba(126, 207, 255, 0.26), rgba(126, 207, 255, 0.1));
+}
+.dock-item::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(126, 207, 255, 0.86);
+  transform: translateX(-50%) scale(0.2);
+  opacity: 0;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+.dock-item-open::after {
+  opacity: 0.9;
+  transform: translateX(-50%) scale(1);
 }
 .dock-glyph {
   font-size: 0.9em;
   font-weight: 700;
+}
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 82px;
+  z-index: 30;
+  display: grid;
+  gap: 0.7em;
+  pointer-events: none;
+}
+.toast {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 36px));
+  padding: 0.8em 0.95em;
+  border-radius: 14px;
+  background: rgba(10, 16, 22, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eaf6ff;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(12px);
+  font-size: 0.86em;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.toast[data-tone="success"] {
+  border-color: rgba(139, 243, 143, 0.18);
+}
+.toast[data-tone="warning"] {
+  border-color: rgba(255, 214, 111, 0.24);
+}
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.toast-exit {
+  opacity: 0;
+  transform: translateY(8px) scale(0.97);
+}
+
+@keyframes windowEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes windowMinimize {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(40px) scale(0.88);
+  }
 }
 .footer-sign {
   position: absolute;
