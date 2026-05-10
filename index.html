@@ -343,44 +343,44 @@ async function loadVisitorInfo() {
 
   let geo = Object.assign({}, fallback);
 
-  try {
-    const providers = [
-      {
-        url: 'https://ipapi.co/json/',
-        map: function(data) {
-          return {
-            ip: data.ip,
-            country: data.country_name,
-            region: data.region,
-            city: data.city,
-            postal: data.postal,
-            timezone: data.timezone,
-            asn: data.asn,
-            isp: data.org || data.org_name
-          };
+  const providers = [
+    {
+      url: 'https://ipwho.is/',
+      map: function(data) {
+        if (data.success === false) {
+          throw new Error('ipwhois lookup failed');
         }
-      },
-      {
-        url: 'https://ipwho.is/',
-        map: function(data) {
-          if (data.success === false) {
-            throw new Error('ipwhois lookup failed');
-          }
-          return {
-            ip: data.ip,
-            country: data.country,
-            region: data.region,
-            city: data.city,
-            postal: data.postal,
-            timezone: data.timezone && data.timezone.id,
-            asn: data.connection && data.connection.asn,
-            isp: data.connection && data.connection.isp
-          };
-        }
+        return {
+          ip: data.ip,
+          country: data.country,
+          region: data.region,
+          city: data.city,
+          postal: data.postal,
+          timezone: data.timezone && data.timezone.id,
+          asn: data.connection && data.connection.asn,
+          isp: data.connection && data.connection.isp
+        };
       }
-    ];
+    },
+    {
+      url: 'https://ipapi.co/json/',
+      map: function(data) {
+        return {
+          ip: data.ip,
+          country: data.country_name,
+          region: data.region,
+          city: data.city,
+          postal: data.postal,
+          timezone: data.timezone,
+          asn: data.asn,
+          isp: data.org || data.org_name
+        };
+      }
+    }
+  ];
 
-    for (const provider of providers) {
+  for (const provider of providers) {
+    try {
       const response = await fetch(provider.url);
       if (!response.ok) {
         continue;
@@ -390,9 +390,9 @@ async function loadVisitorInfo() {
       if (geo.ip && geo.country && geo.country !== fallback.country) {
         break;
       }
+    } catch (error) {
+      geo = Object.assign({}, fallback, geo);
     }
-  } catch (error) {
-    geo = fallback;
   }
 
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
