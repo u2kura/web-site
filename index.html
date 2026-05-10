@@ -685,9 +685,66 @@ const currentLine = document.getElementById('terminal-current-line');
 let history = [];
 let historyIndex = 0;
 let cmdBuffer = '';
+let sshPending = null;
+let sshSession = null;
 
 function getPrompt() {
+  if (sshPending) {
+    return `${sshPending.user}@${sshPending.host}'s password:`;
+  }
+  if (sshSession) {
+    return `${sshSession.user}@${sshSession.host}:~$`;
+  }
   return `uni@web:${currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/')}$`;
+}
+
+function getRemotePromptPath() {
+  return sshSession && sshSession.cwd ? sshSession.cwd : '~';
+}
+
+function handleRemoteCommand(cmd) {
+  const trimmed = cmd.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  if (trimmed === 'exit' || trimmed === 'logout') {
+    printResult(`Connection to ${sshSession.host} closed.`);
+    sshSession = null;
+    return;
+  }
+
+  if (trimmed === 'pwd') {
+    printResult(`/home/${sshSession.user}`);
+    return;
+  }
+
+  if (trimmed === 'ls') {
+    printResult('deploy  logs  projects  tmp');
+    return;
+  }
+
+  if (trimmed === 'whoami') {
+    printResult(sshSession.user);
+    return;
+  }
+
+  if (trimmed === 'hostname') {
+    printResult(sshSession.host);
+    return;
+  }
+
+  if (trimmed === 'uname -a') {
+    printResult(`Linux ${sshSession.host} 6.8.0-generic #1 SMP x86_64 GNU/Linux`);
+    return;
+  }
+
+  if (trimmed === 'help') {
+    printResult('Remote session commands: ls, pwd, whoami, hostname, uname -a, exit');
+    return;
+  }
+
+  printResult(`[remote:${sshSession.host}] ${trimmed}`);
 }
 
 function printLine(promptText, cmd, resultHtml = '') {
@@ -736,8 +793,39 @@ function getDir(pathArr) {
 }
 
 function handleCommand(cmd) {
+  if (sshPending) {
+    sshSession = {
+      user: sshPending.user,
+      host: sshPending.host,
+      cwd: '~'
+    };
+    printResult([
+      `Connecting to ${sshSession.host}...`,
+      `Last login: ${new Date().toLocaleString('ja-JP')} from 10.0.0.42`,
+      `Welcome to ${sshSession.host}. Authentication accepted.`
+    ].join('<br>'));
+    sshPending = null;
+    return;
+  }
+
+  if (sshSession) {
+    handleRemoteCommand(cmd);
+    return;
+  }
+
   const [command, ...args] = cmd.trim().split(/\s+/);
-  if (command === 'cd') {
+  if (command === 'ssh') {
+    const target = args[0] || '';
+    const sshMatch = target.match(/^([^@\s]+)@([^\s]+)$/);
+    if (!sshMatch) {
+      printResult('usage: ssh user@host');
+      return;
+    }
+    sshPending = {
+      user: sshMatch[1],
+      host: sshMatch[2]
+    };
+  } else if (command === 'cd') {
     let target = args[0] || '/';
     let newPath = resolvePath(target);
     let dir = getDir(newPath);
@@ -772,7 +860,7 @@ function handleCommand(cmd) {
   } else if (command === 'pwd') {
     printResult(currentPath.join('/') === '//' ? '/' : currentPath.join('/').replace(/\\/g, '/'));
   } else if (command === 'help') {
-    printResult('Available commands: cd, mkdir, ls, pwd, help, clear');
+    printResult('Available commands: cd, mkdir, ls, pwd, ssh, help, clear');
   } else if (command === 'clear') {
     output.innerHTML = '';
   } else if (command === '') {
@@ -813,10 +901,12 @@ function renderCurrentLine() {
 
 function submitCommand() {
   let cmd = cmdBuffer;
-  printLine(getPrompt(), cmd);
+  printLine(getPrompt(), sshPending ? '********' : cmd);
   handleCommand(cmd);
-  history.push(cmd);
-  historyIndex = history.length;
+  if (!sshPending) {
+    history.push(cmd);
+    historyIndex = history.length;
+  }
   cmdBuffer = '';
   renderCurrentLine();
 }
@@ -828,6 +918,10 @@ currentLine.addEventListener('keydown', function(e) {
     cmdBuffer = inputSpan.innerText.replace(/\n/g, '');
     submitCommand();
   } else if (e.key === 'ArrowUp') {
+    if (sshPending) {
+      e.preventDefault();
+      return;
+    }
     if (historyIndex > 0) {
       historyIndex--;
       cmdBuffer = history[historyIndex] || '';
@@ -835,6 +929,10 @@ currentLine.addEventListener('keydown', function(e) {
     }
     e.preventDefault();
   } else if (e.key === 'ArrowDown') {
+    if (sshPending) {
+      e.preventDefault();
+      return;
+    }
     if (historyIndex < history.length - 1) {
       historyIndex++;
       cmdBuffer = history[historyIndex] || '';
