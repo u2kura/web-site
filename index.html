@@ -742,7 +742,7 @@ function startFakeVim(fileName) {
   vimState = {
     fileName: fileName || 'untitled.txt',
     lines: [''],
-    mode: 'normal',
+    mode: 'insert',
     commandBuffer: '',
     container: container,
     saved: false
@@ -1066,8 +1066,6 @@ function submitCommand() {
 
 currentLine.addEventListener('keydown', function(e) {
   if (vimState) {
-    e.preventDefault();
-    handleVimInput(e.key);
     return;
   }
   let inputSpan = currentLine.querySelector('.terminal-cmd');
@@ -1105,6 +1103,19 @@ currentLine.addEventListener('keydown', function(e) {
       cmdBuffer = inputSpan.innerText.replace(/\n/g, '');
     }, 0);
   }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (!vimState) {
+    return;
+  }
+
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    return;
+  }
+
+  e.preventDefault();
+  handleVimInput(e.key);
 });
 
 currentLine.addEventListener('click', function() {
