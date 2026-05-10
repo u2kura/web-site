@@ -38,6 +38,10 @@
       <span class="desktop-icon-glyph">&gt;_</span>
       <span class="desktop-icon-label">Terminal</span>
     </button>
+    <button class="desktop-icon" type="button" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad">
+      <span class="desktop-icon-glyph">NT</span>
+      <span class="desktop-icon-label">Notes</span>
+    </button>
     <button class="desktop-icon" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed">
       <span class="desktop-icon-glyph">GH</span>
       <span class="desktop-icon-label">GitHub</span>
@@ -97,6 +101,9 @@
     <div class="dock" aria-label="Application dock">
       <button class="dock-item dock-item-active" type="button" data-focus-terminal="true">
         <span class="dock-glyph">&gt;_</span>
+      </button>
+      <button class="dock-item" type="button" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad" aria-label="Notes">
+        <span class="dock-glyph">NT</span>
       </button>
       <button class="dock-item" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed" aria-label="GitHub">
         <span class="dock-glyph">GH</span>
@@ -224,7 +231,7 @@ function showBrowserWindow(url, titleText) {
   browserTitle.textContent = titleText || 'Browser';
   browserAddress.value = url;
   browserOpenExternal.href = url;
-  browserFrame.src = url;
+  browserOpenExternal.style.display = 'inline-flex';
   browserWin.style.boxShadow = '0 18px 44px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(126, 207, 255, 0.28)';
   win.style.boxShadow = '';
   bringWindowToFront(browserWin);
@@ -493,12 +500,197 @@ function setBrowserIframeMode() {
   browserFrame.style.display = 'block';
   browserCustomContent.classList.add('browser-custom-hidden');
   browserEmbedNote.style.display = 'block';
+  browserOpenExternal.style.display = 'inline-flex';
 }
 
 function setBrowserCustomMode() {
   browserFrame.style.display = 'none';
   browserCustomContent.classList.remove('browser-custom-hidden');
   browserEmbedNote.style.display = 'none';
+}
+
+function loadSavedNoteState() {
+  try {
+    const raw = localStorage.getItem(noteStorageKey);
+    if (!raw) {
+      return;
+    }
+    const saved = JSON.parse(raw);
+    if (saved && typeof saved.content === 'string') {
+      noteState.content = saved.content;
+    }
+    if (saved && typeof saved.fileName === 'string' && saved.fileName.trim()) {
+      noteState.fileName = saved.fileName.trim();
+    }
+  } catch (error) {
+    noteState.content = noteState.content || '';
+  }
+}
+
+function persistNoteState() {
+  try {
+    localStorage.setItem(noteStorageKey, JSON.stringify({
+      fileName: noteState.fileName,
+      content: noteState.content,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (error) {
+    return;
+  }
+}
+
+function updateNoteStatus(message, tone) {
+  const status = document.getElementById('memo-status');
+  if (!status) {
+    return;
+  }
+  status.textContent = message;
+  status.dataset.tone = tone || 'neutral';
+}
+
+function syncNoteInputs() {
+  const fileNameInput = document.getElementById('memo-file-name');
+  const editor = document.getElementById('memo-editor');
+  if (fileNameInput) {
+    fileNameInput.value = noteState.fileName;
+  }
+  if (editor && editor.value !== noteState.content) {
+    editor.value = noteState.content;
+  }
+}
+
+function sanitizeNoteFileName(fileName) {
+  const base = (fileName || '').trim() || 'notes.txt';
+  return base.replace(/[\\/:*?"<>|]/g, '-');
+}
+
+function downloadNoteFile(fileName, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function saveNoteToLocalFile() {
+  noteState.fileName = sanitizeNoteFileName(noteState.fileName);
+  persistNoteState();
+  syncNoteInputs();
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: noteState.fileName,
+        types: [
+          {
+            description: 'Text files',
+            accept: {
+              'text/plain': ['.txt', '.md']
+            }
+          }
+        ]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(noteState.content);
+      await writable.close();
+      noteState.handle = handle;
+      noteState.fileName = handle.name || noteState.fileName;
+      persistNoteState();
+      syncNoteInputs();
+      updateNoteStatus('Saved to local file: ' + noteState.fileName, 'success');
+      return;
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        updateNoteStatus('Local save cancelled', 'neutral');
+        return;
+      }
+      updateNoteStatus('Direct save failed. Falling back to download...', 'warning');
+    }
+  }
+
+  downloadNoteFile(noteState.fileName, noteState.content);
+  updateNoteStatus('Downloaded note as ' + noteState.fileName, 'success');
+}
+
+function renderMemoPad() {
+  setBrowserCustomMode();
+  browserFrame.src = 'about:blank';
+  browserAddress.value = 'memo://notes';
+  browserOpenExternal.style.display = 'none';
+  browserCustomContent.innerHTML = '' +
+    '<section class="memo-app">' +
+      '<div class="memo-app-header">' +
+        '<div>' +
+          '<p class="memo-app-kicker">Local Notes</p>' +
+          '<h2 class="memo-app-title">Browser Memo Pad</h2>' +
+        '</div>' +
+        '<p class="memo-app-copy">autosave to browser storage, export to a real local file</p>' +
+      '</div>' +
+      '<div class="memo-toolbar">' +
+        '<label class="memo-field">' +
+          '<span>File name</span>' +
+          '<input id="memo-file-name" class="memo-input" type="text" value="' + escapeHtml(noteState.fileName) + '" placeholder="notes.txt">' +
+        '</label>' +
+        '<div class="memo-actions">' +
+          '<button id="memo-new" class="memo-button memo-button-ghost" type="button">New</button>' +
+          '<button id="memo-save-browser" class="memo-button memo-button-ghost" type="button">Save Draft</button>' +
+          '<button id="memo-save-local" class="memo-button" type="button">Save Local</button>' +
+        '</div>' +
+      '</div>' +
+      '<textarea id="memo-editor" class="memo-editor" spellcheck="false" placeholder="Write notes, commands, ideas, TODOs...">' + escapeHtml(noteState.content) + '</textarea>' +
+      '<div class="memo-footer">' +
+        '<p class="memo-status" id="memo-status" data-tone="neutral">Draft is stored in this browser automatically.</p>' +
+        '<p class="memo-hint">Save Local uses the system save dialog when available, otherwise it downloads a text file.</p>' +
+      '</div>' +
+    '</section>';
+
+  const fileNameInput = document.getElementById('memo-file-name');
+  const editor = document.getElementById('memo-editor');
+  const newButton = document.getElementById('memo-new');
+  const saveDraftButton = document.getElementById('memo-save-browser');
+  const saveLocalButton = document.getElementById('memo-save-local');
+
+  fileNameInput.addEventListener('input', function() {
+    noteState.fileName = sanitizeNoteFileName(fileNameInput.value);
+    persistNoteState();
+    updateNoteStatus('File name updated', 'neutral');
+  });
+
+  editor.addEventListener('input', function() {
+    noteState.content = editor.value;
+    persistNoteState();
+    updateNoteStatus('Draft saved in browser', 'neutral');
+  });
+
+  newButton.addEventListener('click', function() {
+    noteState.content = '';
+    noteState.fileName = 'notes.txt';
+    noteState.handle = null;
+    persistNoteState();
+    syncNoteInputs();
+    updateNoteStatus('Started a new note', 'neutral');
+    editor.focus();
+  });
+
+  saveDraftButton.addEventListener('click', function() {
+    noteState.fileName = sanitizeNoteFileName(fileNameInput.value);
+    noteState.content = editor.value;
+    persistNoteState();
+    syncNoteInputs();
+    updateNoteStatus('Draft stored in browser', 'success');
+  });
+
+  saveLocalButton.addEventListener('click', async function() {
+    noteState.fileName = sanitizeNoteFileName(fileNameInput.value);
+    noteState.content = editor.value;
+    await saveNoteToLocalFile();
+  });
+
+  editor.focus();
 }
 
 async function renderQiitaFeed() {
@@ -606,6 +798,10 @@ async function renderGitHubFeed() {
 
 function openBrowserContent(url, titleText, mode) {
   showBrowserWindow(url, titleText);
+  if (mode === 'memo-pad') {
+    renderMemoPad();
+    return;
+  }
   if (mode === 'github-feed') {
     browserFrame.src = 'about:blank';
     renderGitHubFeed();
@@ -781,6 +977,13 @@ let sshPending = null;
 let sshSession = null;
 let vimState = null;
 let latestVisitorInfo = null;
+let noteState = {
+  fileName: 'notes.txt',
+  content: '',
+  handle: null
+};
+
+const noteStorageKey = 'u2kura-note-pad';
 
 const quickLinks = {
   github: {
@@ -1431,6 +1634,7 @@ document.querySelectorAll('[data-open-browser]').forEach(function(element) {
 window.addEventListener('DOMContentLoaded', () => {
   startBootSequence();
   loadVisitorInfo();
+  loadSavedNoteState();
   renderCurrentLine();
   printLine(getPrompt(), '', "Welcome to the virtual terminal! Type 'help' for commands");
   // 初期ウィンドウサイズ
