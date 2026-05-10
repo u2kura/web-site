@@ -42,6 +42,10 @@
       <span class="desktop-icon-glyph">NT</span>
       <span class="desktop-icon-label">Notes</span>
     </button>
+    <button class="desktop-icon" type="button" data-open-browser="devtools://suite" data-browser-title="Dev Tools" data-browser-mode="dev-tools">
+      <span class="desktop-icon-glyph">DV</span>
+      <span class="desktop-icon-label">DevTools</span>
+    </button>
     <button class="desktop-icon" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed">
       <span class="desktop-icon-glyph">GH</span>
       <span class="desktop-icon-label">GitHub</span>
@@ -104,6 +108,9 @@
       </button>
       <button class="dock-item" type="button" data-open-browser="memo://notes" data-browser-title="Notes" data-browser-mode="memo-pad" aria-label="Notes">
         <span class="dock-glyph">NT</span>
+      </button>
+      <button class="dock-item" type="button" data-open-browser="devtools://suite" data-browser-title="Dev Tools" data-browser-mode="dev-tools" aria-label="Dev Tools">
+        <span class="dock-glyph">DV</span>
       </button>
       <button class="dock-item" type="button" data-open-browser="https://github.com/u2kura" data-browser-title="GitHub / u2kura" data-browser-mode="github-feed" aria-label="GitHub">
         <span class="dock-glyph">GH</span>
@@ -693,6 +700,317 @@ function renderMemoPad() {
   editor.focus();
 }
 
+function writeTextToClipboard(text) {
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    return Promise.reject(new Error('Clipboard API unavailable'));
+  }
+  return navigator.clipboard.writeText(text);
+}
+
+function updateDevToolsStatus(message, tone) {
+  const status = document.getElementById('devtools-status');
+  if (!status) {
+    return;
+  }
+  status.textContent = message;
+  status.dataset.tone = tone || 'neutral';
+}
+
+function setDevToolsTab(activeTab) {
+  devToolState.activeTab = activeTab;
+  document.querySelectorAll('[data-devtools-tab]').forEach(function(button) {
+    button.classList.toggle('tool-tab-active', button.getAttribute('data-devtools-tab') === activeTab);
+  });
+  document.querySelectorAll('[data-devtools-panel]').forEach(function(panel) {
+    panel.classList.toggle('tool-panel-active', panel.getAttribute('data-devtools-panel') === activeTab);
+  });
+}
+
+function createQrImageUrl(text) {
+  return 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(text || 'https://github.com/u2kura/web-site');
+}
+
+function encodeBase64Unicode(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach(function(byte) {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function decodeBase64Unicode(value) {
+  const binary = atob(value.replace(/\s+/g, ''));
+  const bytes = Uint8Array.from(binary, function(char) {
+    return char.charCodeAt(0);
+  });
+  return new TextDecoder().decode(bytes);
+}
+
+function renderUrlParams(value) {
+  const target = document.getElementById('url-params');
+  if (!target) {
+    return;
+  }
+  const raw = (value || '').trim();
+  if (!raw) {
+    target.innerHTML = '<p class="tool-empty">No query params</p>';
+    return;
+  }
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    const entries = Array.from(parsed.searchParams.entries());
+    if (!entries.length) {
+      target.innerHTML = '<p class="tool-empty">No query params</p>';
+      return;
+    }
+    target.innerHTML = entries.map(function(entry) {
+      return '<div class="tool-param-row"><span>' + escapeHtml(entry[0]) + '</span><strong>' + escapeHtml(entry[1]) + '</strong></div>';
+    }).join('');
+  } catch (error) {
+    target.innerHTML = '<p class="tool-empty">Enter a valid URL to inspect params</p>';
+  }
+}
+
+function renderQrPreview(value) {
+  const image = document.getElementById('qr-preview-image');
+  const link = document.getElementById('qr-preview-open');
+  const source = (value || '').trim() || 'https://github.com/u2kura/web-site';
+  const qrUrl = createQrImageUrl(source);
+  if (image) {
+    image.src = qrUrl;
+    image.alt = 'QR for ' + source;
+  }
+  if (link) {
+    link.href = qrUrl;
+  }
+}
+
+function renderDevToolsApp() {
+  setBrowserCustomMode();
+  browserFrame.src = 'about:blank';
+  browserAddress.value = 'devtools://suite';
+  browserOpenExternal.style.display = 'none';
+  browserCustomContent.innerHTML = '' +
+    '<section class="tool-suite">' +
+      '<div class="tool-suite-header">' +
+        '<div>' +
+          '<p class="tool-suite-kicker">Engineer Utilities</p>' +
+          '<h2 class="tool-suite-title">Dev Tools</h2>' +
+        '</div>' +
+        '<p class="tool-suite-copy">QR, Base64, URL, JSON をこの browser app だけで処理できます。</p>' +
+      '</div>' +
+      '<div class="tool-tabs">' +
+        '<button class="tool-tab" type="button" data-devtools-tab="qr">QR</button>' +
+        '<button class="tool-tab" type="button" data-devtools-tab="base64">Base64</button>' +
+        '<button class="tool-tab" type="button" data-devtools-tab="url">URL</button>' +
+        '<button class="tool-tab" type="button" data-devtools-tab="json">JSON</button>' +
+      '</div>' +
+      '<div class="tool-panels">' +
+        '<section class="tool-panel" data-devtools-panel="qr">' +
+          '<div class="tool-grid">' +
+            '<label class="tool-field">' +
+              '<span>Text or URL</span>' +
+              '<textarea id="qr-input" class="tool-textarea" spellcheck="false" placeholder="https://example.com">' + escapeHtml(devToolState.qrInput) + '</textarea>' +
+            '</label>' +
+            '<div class="tool-card tool-card-center">' +
+              '<img id="qr-preview-image" class="tool-qr-image" src="" alt="QR preview">' +
+              '<div class="tool-card-actions">' +
+                '<a id="qr-preview-open" class="memo-button" target="_blank" rel="noreferrer">Open PNG</a>' +
+                '<button id="qr-copy-source" class="memo-button memo-button-ghost" type="button">Copy Source</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+        '<section class="tool-panel" data-devtools-panel="base64">' +
+          '<div class="tool-grid">' +
+            '<label class="tool-field">' +
+              '<span>Input</span>' +
+              '<textarea id="base64-input" class="tool-textarea" spellcheck="false" placeholder="plain text or base64">' + escapeHtml(devToolState.base64Input) + '</textarea>' +
+            '</label>' +
+            '<label class="tool-field">' +
+              '<span>Output</span>' +
+              '<textarea id="base64-output" class="tool-textarea tool-textarea-readonly" readonly>' + escapeHtml(devToolState.base64Output) + '</textarea>' +
+            '</label>' +
+          '</div>' +
+          '<div class="tool-card-actions">' +
+            '<button id="base64-encode" class="memo-button" type="button">Encode</button>' +
+            '<button id="base64-decode" class="memo-button memo-button-ghost" type="button">Decode</button>' +
+            '<button id="base64-copy" class="memo-button memo-button-ghost" type="button">Copy Output</button>' +
+          '</div>' +
+        '</section>' +
+        '<section class="tool-panel" data-devtools-panel="url">' +
+          '<div class="tool-grid">' +
+            '<label class="tool-field">' +
+              '<span>Input</span>' +
+              '<textarea id="url-input" class="tool-textarea" spellcheck="false" placeholder="https://example.com/?a=1&b=2">' + escapeHtml(devToolState.urlInput) + '</textarea>' +
+            '</label>' +
+            '<label class="tool-field">' +
+              '<span>Output</span>' +
+              '<textarea id="url-output" class="tool-textarea tool-textarea-readonly" readonly>' + escapeHtml(devToolState.urlOutput) + '</textarea>' +
+            '</label>' +
+          '</div>' +
+          '<div class="tool-card-actions">' +
+            '<button id="url-encode" class="memo-button" type="button">Encode</button>' +
+            '<button id="url-decode" class="memo-button memo-button-ghost" type="button">Decode</button>' +
+            '<button id="url-copy" class="memo-button memo-button-ghost" type="button">Copy Output</button>' +
+          '</div>' +
+          '<div class="tool-card">' +
+            '<p class="tool-card-title">Query Params</p>' +
+            '<div id="url-params" class="tool-param-list"></div>' +
+          '</div>' +
+        '</section>' +
+        '<section class="tool-panel" data-devtools-panel="json">' +
+          '<div class="tool-grid">' +
+            '<label class="tool-field">' +
+              '<span>Input</span>' +
+              '<textarea id="json-input" class="tool-textarea" spellcheck="false" placeholder="{\n  \"hello\": \"world\"\n}">' + escapeHtml(devToolState.jsonInput) + '</textarea>' +
+            '</label>' +
+            '<label class="tool-field">' +
+              '<span>Output</span>' +
+              '<textarea id="json-output" class="tool-textarea tool-textarea-readonly" readonly>' + escapeHtml(devToolState.jsonOutput) + '</textarea>' +
+            '</label>' +
+          '</div>' +
+          '<div class="tool-card-actions">' +
+            '<button id="json-format" class="memo-button" type="button">Format</button>' +
+            '<button id="json-minify" class="memo-button memo-button-ghost" type="button">Minify</button>' +
+            '<button id="json-validate" class="memo-button memo-button-ghost" type="button">Validate</button>' +
+            '<button id="json-copy" class="memo-button memo-button-ghost" type="button">Copy Output</button>' +
+          '</div>' +
+        '</section>' +
+      '</div>' +
+      '<div class="memo-footer">' +
+        '<p class="memo-status" id="devtools-status" data-tone="neutral">Ready.</p>' +
+        '<p class="memo-hint">QR uses a generated image URL. Base64, URL, JSON are handled locally in the browser.</p>' +
+      '</div>' +
+    '</section>';
+
+  document.querySelectorAll('[data-devtools-tab]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      setDevToolsTab(button.getAttribute('data-devtools-tab'));
+    });
+  });
+
+  const qrInput = document.getElementById('qr-input');
+  const base64Input = document.getElementById('base64-input');
+  const base64Output = document.getElementById('base64-output');
+  const urlInput = document.getElementById('url-input');
+  const urlOutput = document.getElementById('url-output');
+  const jsonInput = document.getElementById('json-input');
+  const jsonOutput = document.getElementById('json-output');
+
+  qrInput.addEventListener('input', function() {
+    devToolState.qrInput = qrInput.value;
+    renderQrPreview(devToolState.qrInput);
+    updateDevToolsStatus('QR updated', 'neutral');
+  });
+  document.getElementById('qr-copy-source').addEventListener('click', function() {
+    writeTextToClipboard(qrInput.value).then(function() {
+      updateDevToolsStatus('QR source copied', 'success');
+    }).catch(function() {
+      updateDevToolsStatus('Clipboard API is unavailable', 'warning');
+    });
+  });
+
+  document.getElementById('base64-encode').addEventListener('click', function() {
+    try {
+      devToolState.base64Input = base64Input.value;
+      devToolState.base64Output = encodeBase64Unicode(devToolState.base64Input);
+      base64Output.value = devToolState.base64Output;
+      updateDevToolsStatus('Base64 encoded', 'success');
+    } catch (error) {
+      updateDevToolsStatus('Base64 encode failed', 'warning');
+    }
+  });
+  document.getElementById('base64-decode').addEventListener('click', function() {
+    try {
+      devToolState.base64Input = base64Input.value;
+      devToolState.base64Output = decodeBase64Unicode(devToolState.base64Input);
+      base64Output.value = devToolState.base64Output;
+      updateDevToolsStatus('Base64 decoded', 'success');
+    } catch (error) {
+      updateDevToolsStatus('Invalid Base64 input', 'warning');
+    }
+  });
+  document.getElementById('base64-copy').addEventListener('click', function() {
+    writeTextToClipboard(base64Output.value).then(function() {
+      updateDevToolsStatus('Base64 output copied', 'success');
+    }).catch(function() {
+      updateDevToolsStatus('Clipboard API is unavailable', 'warning');
+    });
+  });
+
+  urlInput.addEventListener('input', function() {
+    devToolState.urlInput = urlInput.value;
+    renderUrlParams(devToolState.urlInput);
+  });
+  document.getElementById('url-encode').addEventListener('click', function() {
+    devToolState.urlInput = urlInput.value;
+    devToolState.urlOutput = encodeURIComponent(devToolState.urlInput);
+    urlOutput.value = devToolState.urlOutput;
+    renderUrlParams(devToolState.urlInput);
+    updateDevToolsStatus('URL encoded', 'success');
+  });
+  document.getElementById('url-decode').addEventListener('click', function() {
+    try {
+      devToolState.urlInput = urlInput.value;
+      devToolState.urlOutput = decodeURIComponent(devToolState.urlInput);
+      urlOutput.value = devToolState.urlOutput;
+      renderUrlParams(devToolState.urlOutput);
+      updateDevToolsStatus('URL decoded', 'success');
+    } catch (error) {
+      updateDevToolsStatus('Invalid encoded URL input', 'warning');
+    }
+  });
+  document.getElementById('url-copy').addEventListener('click', function() {
+    writeTextToClipboard(urlOutput.value).then(function() {
+      updateDevToolsStatus('URL output copied', 'success');
+    }).catch(function() {
+      updateDevToolsStatus('Clipboard API is unavailable', 'warning');
+    });
+  });
+
+  document.getElementById('json-format').addEventListener('click', function() {
+    try {
+      devToolState.jsonInput = jsonInput.value;
+      devToolState.jsonOutput = JSON.stringify(JSON.parse(devToolState.jsonInput), null, 2);
+      jsonOutput.value = devToolState.jsonOutput;
+      updateDevToolsStatus('JSON formatted', 'success');
+    } catch (error) {
+      updateDevToolsStatus('Invalid JSON input', 'warning');
+    }
+  });
+  document.getElementById('json-minify').addEventListener('click', function() {
+    try {
+      devToolState.jsonInput = jsonInput.value;
+      devToolState.jsonOutput = JSON.stringify(JSON.parse(devToolState.jsonInput));
+      jsonOutput.value = devToolState.jsonOutput;
+      updateDevToolsStatus('JSON minified', 'success');
+    } catch (error) {
+      updateDevToolsStatus('Invalid JSON input', 'warning');
+    }
+  });
+  document.getElementById('json-validate').addEventListener('click', function() {
+    try {
+      JSON.parse(jsonInput.value);
+      updateDevToolsStatus('JSON is valid', 'success');
+    } catch (error) {
+      updateDevToolsStatus('JSON parse error: ' + error.message, 'warning');
+    }
+  });
+  document.getElementById('json-copy').addEventListener('click', function() {
+    writeTextToClipboard(jsonOutput.value).then(function() {
+      updateDevToolsStatus('JSON output copied', 'success');
+    }).catch(function() {
+      updateDevToolsStatus('Clipboard API is unavailable', 'warning');
+    });
+  });
+
+  setDevToolsTab(devToolState.activeTab);
+  renderQrPreview(devToolState.qrInput);
+  renderUrlParams(devToolState.urlInput);
+}
+
 async function renderQiitaFeed() {
   setBrowserCustomMode();
   browserCustomContent.innerHTML = '<div class="browser-loading">Loading Qiita articles...</div>';
@@ -800,6 +1118,10 @@ function openBrowserContent(url, titleText, mode) {
   showBrowserWindow(url, titleText);
   if (mode === 'memo-pad') {
     renderMemoPad();
+    return;
+  }
+  if (mode === 'dev-tools') {
+    renderDevToolsApp();
     return;
   }
   if (mode === 'github-feed') {
@@ -982,10 +1304,25 @@ let noteState = {
   content: '',
   handle: null
 };
+let devToolState = {
+  activeTab: 'qr',
+  qrInput: 'https://github.com/u2kura/web-site',
+  base64Input: 'u2kura',
+  base64Output: '',
+  urlInput: 'https://example.com/docs?q=engineer tools&lang=ja',
+  urlOutput: '',
+  jsonInput: '{\n  "name": "u2kura",\n  "tools": ["qr", "base64", "json"]\n}',
+  jsonOutput: ''
+};
 
 const noteStorageKey = 'u2kura-note-pad';
 
 const quickLinks = {
+  devtools: {
+    url: 'devtools://suite',
+    title: 'Dev Tools',
+    mode: 'dev-tools'
+  },
   github: {
     url: 'https://github.com/u2kura',
     title: 'GitHub / u2kura',
@@ -1243,11 +1580,7 @@ function openQuickLink(target) {
 }
 
 function copyTextToClipboard(text, successMessage) {
-  if (!navigator.clipboard || !navigator.clipboard.writeText) {
-    printResult('Clipboard API is unavailable in this browser');
-    return;
-  }
-  navigator.clipboard.writeText(text).then(function() {
+  writeTextToClipboard(text).then(function() {
     printResult(successMessage || 'Copied to clipboard');
   }).catch(function() {
     printResult('Failed to copy to clipboard');
