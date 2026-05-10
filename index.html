@@ -1072,13 +1072,38 @@ function renderCurrentLine() {
 
 function submitCommand() {
   let cmd = cmdBuffer;
+  const wasSshPasswordPrompt = Boolean(sshPending);
   printLine(getPrompt(), sshPending ? '********' : cmd);
   handleCommand(cmd);
-  if (!sshPending) {
+  if (!wasSshPasswordPrompt && cmd.trim()) {
     history.push(cmd);
     historyIndex = history.length;
   }
   cmdBuffer = '';
+  renderCurrentLine();
+}
+
+function navigateHistory(direction) {
+  if (sshPending || !history.length) {
+    return;
+  }
+
+  if (direction === 'up') {
+    if (historyIndex > 0) {
+      historyIndex--;
+      cmdBuffer = history[historyIndex] || '';
+      renderCurrentLine();
+    }
+    return;
+  }
+
+  if (historyIndex < history.length - 1) {
+    historyIndex++;
+    cmdBuffer = history[historyIndex] || '';
+  } else {
+    historyIndex = history.length;
+    cmdBuffer = '';
+  }
   renderCurrentLine();
 }
 
@@ -1092,29 +1117,10 @@ currentLine.addEventListener('keydown', function(e) {
     cmdBuffer = inputSpan.innerText.replace(/\n/g, '');
     submitCommand();
   } else if (e.key === 'ArrowUp') {
-    if (sshPending) {
-      e.preventDefault();
-      return;
-    }
-    if (historyIndex > 0) {
-      historyIndex--;
-      cmdBuffer = history[historyIndex] || '';
-      renderCurrentLine();
-    }
+    navigateHistory('up');
     e.preventDefault();
   } else if (e.key === 'ArrowDown') {
-    if (sshPending) {
-      e.preventDefault();
-      return;
-    }
-    if (historyIndex < history.length - 1) {
-      historyIndex++;
-      cmdBuffer = history[historyIndex] || '';
-    } else {
-      historyIndex = history.length;
-      cmdBuffer = '';
-    }
-    renderCurrentLine();
+    navigateHistory('down');
     e.preventDefault();
   } else {
     setTimeout(() => {
