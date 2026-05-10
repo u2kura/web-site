@@ -30,7 +30,6 @@
     <div class="topbar-right">
       <span class="status-pill">NET</span>
       <span class="status-pill">DEV</span>
-      <span class="status-clock" id="status-clock">00:00</span>
     </div>
   </header>
   <aside class="desktop-shortcuts" aria-label="Desktop shortcuts">
@@ -105,8 +104,11 @@
   </main>
   <footer class="site-footer">
     <button class="start-button" id="start-button" type="button" aria-label="Open start menu" aria-expanded="false">
-      <span class="start-button-badge">U</span>
-      <span class="start-button-label">Start</span>
+      <span class="start-button-badge" aria-hidden="true">
+        <span class="start-button-badge-core">
+          <span class="start-button-badge-letter">U</span>
+        </span>
+      </span>
     </button>
     <div class="dock" aria-label="Application dock">
       <button class="dock-item dock-item-active" type="button" data-focus-terminal="true" data-app="terminal">
@@ -443,11 +445,52 @@ function clampDesktopIconPosition(icon, x, y) {
   };
 }
 
-function applyDesktopIconLayout() {
-  const positions = loadDesktopIconLayout();
+function isDesktopIconOverlapping(candidate, placedIcons) {
+  return placedIcons.some(function(placed) {
+    return !(
+      candidate.x + candidate.width <= placed.x ||
+      placed.x + placed.width <= candidate.x ||
+      candidate.y + candidate.height <= placed.y ||
+      placed.y + placed.height <= candidate.y
+    );
+  });
+}
+
+function normalizeDesktopIconLayout(rawPositions) {
+  const resolved = {};
+  const placedIcons = [];
+  const rowStep = 98;
+  const columnStep = 96;
+
   desktopIcons.forEach(function(icon) {
     const id = icon.getAttribute('data-desktop-id');
-    const next = clampDesktopIconPosition(icon, positions[id].x, positions[id].y);
+    let next = clampDesktopIconPosition(icon, rawPositions[id].x, rawPositions[id].y);
+    const width = icon.offsetWidth || 78;
+    const height = icon.offsetHeight || 82;
+    let attempts = 0;
+
+    while (isDesktopIconOverlapping({ x: next.x, y: next.y, width: width, height: height }, placedIcons) && attempts < 120) {
+      const movedDown = clampDesktopIconPosition(icon, next.x, next.y + rowStep);
+      if (movedDown.y !== next.y) {
+        next = movedDown;
+      } else {
+        next = clampDesktopIconPosition(icon, next.x + columnStep, 0);
+      }
+      attempts += 1;
+    }
+
+    resolved[id] = next;
+    placedIcons.push({ x: next.x, y: next.y, width: width, height: height });
+  });
+
+  return resolved;
+}
+
+function applyDesktopIconLayout() {
+  const positions = normalizeDesktopIconLayout(loadDesktopIconLayout());
+  desktopIcons.forEach(function(icon) {
+    const id = icon.getAttribute('data-desktop-id');
+    const next = positions[id];
     icon.style.left = next.x + 'px';
     icon.style.top = next.y + 'px';
   });
