@@ -1105,6 +1105,12 @@ body::after {
   color: #d9efff;
   font-size: 0.78em;
 }
+.topbar-handle {
+  color: #b8def8;
+  font-size: 0.78em;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 10px rgba(8, 20, 32, 0.45);
+}
 .status-clock {
   min-width: 54px;
 }
@@ -1198,7 +1204,7 @@ main {
   box-shadow: 0 -2px 16px 0 rgba(0,0,0,0.18);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 1em;
   box-sizing: border-box;
   backdrop-filter: blur(18px);
@@ -1206,44 +1212,74 @@ main {
 .start-button {
   appearance: none;
   -webkit-appearance: none;
-  min-width: 104px;
-  height: 44px;
-  padding: 0 0.95em;
-  border-radius: 14px;
-  border: 1px solid rgba(126, 207, 255, 0.18);
-  background: linear-gradient(180deg, rgba(126, 207, 255, 0.18), rgba(126, 207, 255, 0.06));
+  width: 54px;
+  height: 48px;
+  padding: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(126, 207, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    linear-gradient(135deg, rgba(126, 207, 255, 0.22), rgba(126, 207, 255, 0.1) 62%, rgba(170, 214, 255, 0.12));
   color: #e8f6ff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55em;
   font: inherit;
   cursor: pointer;
-  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 22px rgba(0, 0, 0, 0.16);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, filter 0.16s ease;
 }
 .start-button:hover,
 .start-button-active {
   transform: translateY(-1px);
-  border-color: rgba(126, 207, 255, 0.34);
-  background: linear-gradient(180deg, rgba(126, 207, 255, 0.26), rgba(126, 207, 255, 0.1));
-  box-shadow: 0 10px 24px rgba(126, 207, 255, 0.16);
+  border-color: rgba(126, 207, 255, 0.38);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent),
+    linear-gradient(135deg, rgba(126, 207, 255, 0.3), rgba(126, 207, 255, 0.14) 62%, rgba(170, 214, 255, 0.16));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 28px rgba(126, 207, 255, 0.16);
+  filter: saturate(1.05);
 }
 .start-button-badge {
-  width: 24px;
-  height: 24px;
+  position: relative;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, rgba(139, 243, 143, 0.32), rgba(139, 243, 143, 0.12));
-  border: 1px solid rgba(139, 243, 143, 0.22);
-  color: #f3fff3;
-  font-size: 0.82em;
-  font-weight: 700;
+  background: linear-gradient(180deg, rgba(5, 11, 16, 0.68), rgba(9, 17, 24, 0.96));
+  border: 1px solid rgba(126, 207, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
-.start-button-label {
-  font-size: 0.84em;
-  letter-spacing: 0.04em;
+.start-button-badge::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(126, 207, 255, 0.18), rgba(126, 207, 255, 0.08));
+  opacity: 0.9;
+}
+.start-button-badge-core {
+  position: relative;
+  z-index: 1;
+  width: 19px;
+  height: 19px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(126, 207, 255, 0.34), rgba(126, 207, 255, 0.12));
+  border: 1px solid rgba(126, 207, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.start-button-badge-letter {
+  position: relative;
+  top: -0.5px;
+  color: #f2fdff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-shadow: 0 0 10px rgba(126, 207, 255, 0.22);
 }
 .start-menu {
   position: fixed;
@@ -1497,11 +1533,14 @@ main {
     transform: translateY(40px) scale(0.88);
   }
 }
-.footer-sign {
+.footer-clock {
   position: absolute;
-  right: 16px;
-  color: #b3d7ef;
+  right: 28px;
+  min-width: 132px;
+  color: #dff2ff;
   font-size: 0.8em;
+  letter-spacing: 0.06em;
+  text-align: right;
   pointer-events: none;
 }
 
@@ -1536,6 +1575,10 @@ main {
   .site-footer {
     justify-content: flex-start;
     padding-right: 72px;
+  }
+
+  .topbar-handle {
+    display: none;
   }
 
   .start-menu {

@@ -28,8 +28,7 @@
       <span class="topbar-chip">workspace</span>
     </div>
     <div class="topbar-right">
-      <span class="status-pill">NET</span>
-      <span class="status-pill">DEV</span>
+      <span class="topbar-handle">@u2kura</span>
     </div>
   </header>
   <aside class="desktop-shortcuts" aria-label="Desktop shortcuts">
@@ -130,7 +129,7 @@
         <span class="dock-glyph">X</span>
       </a>
     </div>
-    <span class="footer-sign">©u2kura</span>
+    <span class="footer-clock" id="status-clock">0000/00/00 00:00</span>
   </footer>
   <section class="start-menu start-menu-hidden" id="start-menu" aria-label="Start menu">
     <div class="start-menu-top">
@@ -1528,10 +1527,16 @@ function updateClock() {
     return;
   }
   const now = new Date();
-  clock.textContent = now.toLocaleTimeString('ja-JP', {
+  const date = now.toLocaleDateString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).replace(/\//g, '/');
+  const time = now.toLocaleTimeString('ja-JP', {
     hour: '2-digit',
     minute: '2-digit'
   });
+  clock.textContent = date + ' ' + time;
 }
 
 winHeader.addEventListener('mousedown', function(e) {
